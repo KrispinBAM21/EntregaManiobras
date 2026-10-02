@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<!-- ENTREGA DE MANIOBRAS
+1. Sube este archivo como index.html en tu hosting HTTPS.
+2. Administración > Negocio: confirma origen por GPS/mapa/coordenadas, WhatsApp,
+   banca, redes y precios de servicio/documentos. Productos: precios de papelería.
+3. Administración > Calculadora de viajes: vehículo, combustible, rendimiento,
+   tarifa/km, margen, redondeo y modalidad ida/vuelta; pulsa Usar esta tarifa.
+4. Administración > Negocio > CARTO: añade la clave pública/URL de tiles si tu
+   cuenta lo requiere. CARTO dibuja el mapa; Nominatim busca calles; OSRM calcula.
+5. Por defecto funciona LOCALMENTE para configurar y revisar pedidos/PDF.
+   Para compartir configuración y operar Telegram, conecta un proyecto Supabase
+   EXCLUSIVO cambiando SUPABASE_URL y SUPABASE_ANON_KEY (clave pública) abajo.
+   Requiere el SQL original: catalog_settings, products, orders, receipts,
+   order_events; RPC is_catalog_admin y submit_order; Auth admin y políticas RLS.
+   Telegram conserva receipt-upload, telegram-webhook y telegram-admin.
+   No incluye una migración SQL ni despliega funciones; usa las de tu catálogo.
+6. submit_order debe recalcular precios desde products/config y no confiar en
+   importes del cliente. shipping.perKm contiene el equivalente con combustible
+   y retorno; NO volver a multiplicar la distancia por roundTrip en el servidor.
+   Revisa esta equivalencia con tu SQL antes de habilitar cobros reales.
+7. Sin conexión configurada, los cambios solo se guardan en este navegador;
+   el modo local no es un acceso protegido de producción. Nunca pongas un token
+   de Telegram ni una clave service_role en este archivo.
+-->
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Entrega de Maniobras</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@400;600;700;800&family=Poppins:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{
+  --primary:#c62828; --secondary:#fff3f3; --accent:#ffb300; --text:#232323; --card:#ffffff;
+  --site-bg:#f7f7f9; --muted:#6b7280; --line:#e5e7eb; --success:#16834b; --warning:#b7791f; --danger:#b42318;
+  --radius:18px; --product-icon-size:72px; --product-icon-color:#c62828; --font:'Inter',sans-serif;
+  --pattern-opacity:.055; --bg-image-opacity:.18;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:var(--font);color:var(--text);background:var(--site-bg);min-height:100vh;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-2;background:var(--site-bg)}
+body.pattern-on::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;opacity:var(--pattern-opacity);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150' viewBox='0 0 150 150'%3E%3Cg fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M18 35h26l-3 20H21zM23 30h16M60 23c8 0 14 6 14 14s-6 14-14 14-14-6-14-14 6-14 14-14zM97 25h28l-4 18H101zM103 21h16M28 96c8-10 22-10 30 0v19H28zM75 91h30v25H75zM109 89c8 0 14 6 14 14s-6 14-14 14-14-6-14-14 6-14 14-14z'/%3E%3C/g%3E%3C/svg%3E");}
+img{max-width:100%;display:block}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+.container{width:min(1180px,calc(100% - 28px));margin-inline:auto}
+.topbar{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--card) 94%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.header{display:flex;align-items:center;gap:14px;padding:12px 0}
+.brand{display:flex;align-items:center;gap:12px;min-width:0;flex:1}
+.brand-logo{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;background:var(--secondary);overflow:hidden;flex:0 0 auto;color:var(--primary)}
+.brand-logo img{width:100%;height:100%;object-fit:cover}
+.brand-copy{min-width:0}
+.brand-copy h1{font-size:1.02rem;line-height:1.2;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand-copy p{font-size:.8rem;color:var(--muted);margin:3px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon-btn,.btn{border:0;border-radius:14px;display:inline-flex;align-items:center;justify-content:center;gap:9px;font-weight:700;transition:.2s ease;min-height:44px}
+.icon-btn{width:44px;padding:0;background:var(--secondary);color:var(--primary)}
+.icon-btn:hover,.btn:hover{transform:translateY(-1px)}
+.icon-btn svg,.btn svg,.tab-btn svg,.chip svg,.status-badge svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.cart-btn{position:relative}
+.badge-count{position:absolute;right:-4px;top:-5px;min-width:19px;height:19px;border-radius:999px;background:var(--primary);color:white;font-size:.72rem;display:grid;place-items:center;padding:0 5px;border:2px solid var(--card)}
+.hero{padding:26px 0 12px}
+.hero-card{background:linear-gradient(135deg,var(--primary),color-mix(in srgb,var(--primary) 68%,#111));color:#fff;border-radius:calc(var(--radius) + 6px);padding:24px;box-shadow:0 18px 40px color-mix(in srgb,var(--primary) 22%,transparent)}
+.hero-card h2{margin:0 0 7px;font-size:clamp(1.55rem,6vw,2.6rem)}
+.hero-card p{margin:0;opacity:.9;max-width:760px}
+.controls{padding:18px 0 10px;display:grid;gap:12px}
+.search-wrap{position:relative}
+.search-wrap svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:19px;height:19px;stroke:var(--muted);fill:none;stroke-width:1.8}
+.search-wrap input{width:100%;height:48px;border:1px solid var(--line);border-radius:14px;background:var(--card);padding:0 14px 0 44px;color:var(--text);outline:none}
+.chips{display:flex;gap:8px;overflow:auto;padding-bottom:4px;scrollbar-width:none}
+.chip{flex:0 0 auto;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:999px;padding:10px 14px;font-weight:700}
+.chip.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.grid{display:grid;grid-template-columns:1fr;gap:14px;padding:10px 0 96px}
+.product-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;display:grid;grid-template-columns:auto 1fr;gap:14px;box-shadow:0 8px 22px rgba(20,20,20,.05)}
+.product-visual{width:var(--product-icon-size);height:var(--product-icon-size);display:grid;place-items:center;border-radius:16px;background:var(--secondary);color:var(--product-icon-color);overflow:hidden}
+.product-visual svg{width:78%;height:78%;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.product-visual img{width:100%;height:100%;object-fit:cover}
+.product-body{min-width:0}
+.product-head{display:flex;align-items:start;justify-content:space-between;gap:10px}
+.product-name{font-weight:800;margin:0;font-size:1rem}
+.price{font-weight:800;color:var(--primary);white-space:nowrap}
+.desc{color:var(--muted);font-size:.88rem;margin:6px 0 8px;line-height:1.45}
+.meta{display:flex;flex-wrap:wrap;gap:6px 10px;color:var(--muted);font-size:.78rem}
+.qty-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px}
+.qty-control{display:inline-flex;align-items:center;gap:8px;background:var(--secondary);border-radius:12px;padding:4px}
+.qty-control .icon-btn{width:34px;height:34px;min-height:34px;border-radius:10px;background:var(--card)}
+.qty-value{min-width:24px;text-align:center;font-weight:800}
+.stock-out{color:var(--danger);font-weight:800;font-size:.86rem}
+.btn{padding:0 16px;background:var(--primary);color:#fff}
+.btn.secondary{background:var(--secondary);color:var(--primary)}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+.btn.danger{background:var(--danger);color:#fff}
+.btn.success{background:var(--success);color:#fff}
+.btn.full{width:100%}
+.btn:disabled,.icon-btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.fab-whatsapp{position:fixed;right:18px;bottom:18px;z-index:55;width:58px;height:58px;border-radius:50%;border:0;background:#1f9d55;color:#fff;display:grid;place-items:center;box-shadow:0 14px 28px rgba(0,0,0,.22)}
+.fab-whatsapp svg{width:30px;height:30px}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.46);z-index:80;opacity:0;pointer-events:none;transition:.2s}
+.overlay.show{opacity:1;pointer-events:auto}
+.drawer{position:fixed;inset:0 0 0 auto;width:min(100%,480px);background:var(--card);z-index:90;transform:translateX(100%);transition:.25s ease;display:flex;flex-direction:column}
+.drawer.show{transform:translateX(0)}
+.drawer-head,.modal-head{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:14px}
+.drawer-body{padding:16px 18px;overflow:auto;flex:1}
+.drawer-foot{padding:14px 18px;border-top:1px solid var(--line);display:grid;gap:10px}
+.cart-item{display:grid;grid-template-columns:1fr auto;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+.cart-item h4{margin:0 0 4px;font-size:.95rem}.cart-item p{margin:0;color:var(--muted);font-size:.82rem}
+.form-section{margin:18px 0}.form-section h3{font-size:1rem;margin:0 0 10px}
+.field{display:grid;gap:6px;margin-bottom:11px}.field label{font-size:.82rem;font-weight:700;color:var(--muted)}
+.input,.textarea,.select{width:100%;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--text);padding:11px 12px;outline:none}
+.textarea{min-height:86px;resize:vertical}
+.radio-group{display:grid;grid-template-columns:1fr 1fr;gap:8px}.radio-card{position:relative}.radio-card input{position:absolute;opacity:0;pointer-events:none}.radio-card label{display:block;border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center;font-weight:800}.radio-card input:checked+label{border-color:var(--primary);background:var(--secondary);color:var(--primary)}
+.payment-item{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px}.payment-item .row{display:flex;align-items:center;justify-content:space-between;gap:10px}.payment-data{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;color:var(--muted);margin-top:6px;font-size:.84rem}
+.copy-note{display:none;align-items:center;gap:6px;color:var(--success);font-size:.8rem;font-weight:800;margin-top:7px}.copy-note.show{display:flex}.copy-note svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2}
+.preview-file{border:1px dashed var(--line);border-radius:12px;padding:12px;display:none;gap:10px;align-items:center}.preview-file.show{display:flex}.preview-file img{width:58px;height:58px;border-radius:10px;object-fit:cover}.file-generic{width:58px;height:58px;border-radius:10px;background:var(--secondary);color:var(--primary);display:grid;place-items:center}.file-generic svg{width:28px;height:28px;stroke:currentColor;fill:none;stroke-width:1.8}
+.notice{background:var(--secondary);color:var(--text);border-left:4px solid var(--primary);padding:11px 12px;border-radius:10px;font-size:.84rem;line-height:1.45}
+.summary-table{width:100%;border-collapse:collapse;font-size:.84rem}.summary-table th,.summary-table td{border-bottom:1px solid var(--line);padding:9px 6px;text-align:left}.summary-table th{text-transform:uppercase;font-size:.72rem;color:var(--muted)}
+.total-box{display:grid;gap:6px;margin-top:12px}.total-line{display:flex;justify-content:space-between;gap:10px}.total-line.grand{font-size:1.15rem;font-weight:900;color:var(--primary);padding-top:8px;border-top:2px solid var(--line)}
+.modal{position:fixed;inset:3vh auto auto 50%;transform:translate(-50%,-20px);width:min(960px,calc(100% - 24px));max-height:94vh;background:var(--card);z-index:100;border-radius:20px;box-shadow:0 25px 60px rgba(0,0,0,.28);opacity:0;pointer-events:none;transition:.2s;overflow:hidden}
+.modal.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+.modal-body{padding:16px 18px;overflow:auto;max-height:calc(94vh - 70px)}
+.admin-modal{width:min(1180px,calc(100% - 18px));height:96vh;inset:2vh auto auto 50%;max-height:none}.admin-modal .modal-body{max-height:calc(96vh - 70px);padding:0}
+.admin-layout{display:grid;grid-template-columns:1fr}.admin-tabs{display:flex;gap:6px;overflow:auto;padding:10px;border-bottom:1px solid var(--line);background:var(--card)}
+.tab-btn{border:0;background:transparent;color:var(--muted);border-radius:10px;padding:9px 11px;display:flex;align-items:center;gap:7px;font-weight:800;white-space:nowrap}.tab-btn.active{background:var(--secondary);color:var(--primary)}
+.admin-content{padding:16px}.admin-pane{display:none}.admin-pane.active{display:block}.section-card{border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--card);margin-bottom:14px}.section-card h3{margin:0 0 12px}
+.admin-grid{display:grid;grid-template-columns:1fr;gap:12px}.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.product-admin{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.icon-picker{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:310px;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:8px}.icon-option{border:1px solid var(--line);background:var(--card);border-radius:10px;aspect-ratio:1;display:grid;place-items:center;color:var(--product-icon-color)}.icon-option.selected{border:2px solid var(--primary);background:var(--secondary)}.icon-option svg{width:68%;height:68%;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.palette-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.palette-card{border:1px solid var(--line);border-radius:12px;padding:8px;background:var(--card);text-align:left}.swatches{display:flex;gap:4px;margin-top:7px}.swatches span{height:18px;flex:1;border-radius:6px}
+.color-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.color-input{display:flex;align-items:center;gap:8px}.color-input input[type=color]{width:46px;height:36px;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:3px}
+.map{height:290px;border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+.result-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.metric{padding:12px;border-radius:12px;background:var(--secondary)}.metric strong{display:block;font-size:1.1rem;color:var(--primary)}.metric span{font-size:.75rem;color:var(--muted)}
+.table-wrap{overflow:auto}.admin-table{width:100%;border-collapse:collapse;min-width:720px}.admin-table th,.admin-table td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:.84rem}.admin-table th{color:var(--muted);font-size:.72rem;text-transform:uppercase}
+.status-badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 9px;font-weight:800;font-size:.75rem}.status-pendiente{background:#fff3cd;color:#7a5700}.status-pagado{background:#dff4e9;color:#176a43}.status-entregado{background:#e6edf8;color:#234c82}.status-badge svg{width:15px;height:15px}
+.toast-wrap{position:fixed;top:76px;right:14px;z-index:200;display:grid;gap:8px;width:min(360px,calc(100% - 28px))}.toast{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:0 12px 26px rgba(0,0,0,.12);display:flex;gap:9px;align-items:flex-start}.toast svg{width:20px;height:20px;stroke:var(--primary);fill:none;stroke-width:1.9;flex:0 0 auto}.hidden{display:none!important}.muted{color:var(--muted)}.small{font-size:.8rem}.stack{display:grid;gap:10px}.row{display:flex;align-items:center;gap:10px}.between{justify-content:space-between}.wrap{flex-wrap:wrap}.right{text-align:right}
+hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+@media(min-width:720px){.controls{grid-template-columns:1.3fr 2fr;align-items:center}.grid{grid-template-columns:repeat(2,1fr)}.admin-grid.two{grid-template-columns:1fr 1fr}.icon-picker{grid-template-columns:repeat(6,1fr)}.palette-grid{grid-template-columns:repeat(3,1fr)}.result-grid{grid-template-columns:repeat(4,1fr)}}
+@media(min-width:1020px){.grid{grid-template-columns:repeat(3,1fr)}.admin-layout{grid-template-columns:220px 1fr}.admin-tabs{display:grid;align-content:start;gap:4px;border-right:1px solid var(--line);border-bottom:0;padding:14px}.tab-btn{justify-content:flex-start}.admin-content{padding:20px}.icon-picker{grid-template-columns:repeat(8,1fr)}}
+
+/* Tema público claro/oscuro */
+.theme-btn{flex:0 0 auto}
+body.dark-mode{
+  --text:#f3f4f6 !important;
+  --muted:#aeb7c5 !important;
+  --card:#161a20 !important;
+  --site-bg:#0d1015 !important;
+  --secondary:#242a33 !important;
+  --line:#303743 !important;
+}
+body.dark-mode::before{background:#0d1015}
+body.dark-mode.pattern-on::after{filter:invert(1);opacity:.025}
+body.dark-mode .topbar{background:rgba(22,26,32,.94)}
+body.dark-mode .product-card,
+body.dark-mode .section-card,
+body.dark-mode .payment-item,
+body.dark-mode .summary-card,
+body.dark-mode .modal,
+body.dark-mode .drawer,
+body.dark-mode .toast{box-shadow:0 10px 30px rgba(0,0,0,.24)}
+body.dark-mode .input,
+body.dark-mode .textarea,
+body.dark-mode .select,
+body.dark-mode .search-wrap input{background:#11151b;color:#f3f4f6}
+body.dark-mode .hero-card{box-shadow:0 18px 44px rgba(0,0,0,.3)}
+body.dark-mode .leaflet-container{background:#171b21}
+.theme-switch-label{display:none}
+@media(min-width:720px){.theme-switch-label{display:inline}}
+.icon-pack-tabs{display:flex;gap:7px;overflow:auto;margin:0 0 10px;padding-bottom:3px}
+.icon-pack-btn{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:999px;padding:7px 10px;font-size:.76rem;font-weight:800;white-space:nowrap}
+.icon-pack-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.supabase-status{display:flex;align-items:flex-start;gap:8px;margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--secondary);color:var(--text);font-size:.8rem}
+.supabase-status svg{width:18px;height:18px;flex:0 0 auto;stroke:currentColor;fill:none;stroke-width:1.9}
+.supabase-status[data-kind="ok"]{color:var(--success)}
+.supabase-status[data-kind="error"]{color:var(--danger)}
+.supabase-status[data-kind="warn"]{color:var(--warning)}
+
+
+/* Centro administrativo V5 */
+.admin-dashboard{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.admin-kpi{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:14px}
+.admin-kpi strong{display:block;font-size:1.35rem;color:var(--primary);margin-top:4px}
+.admin-kpi span{font-size:.76rem;color:var(--muted);font-weight:700}
+.admin-kpi svg,.review-card svg,.integration-card svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.review-list{display:grid;gap:10px}
+.review-card{border:1px solid var(--line);background:var(--card);border-radius:14px;padding:13px}
+.review-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.review-meta{display:flex;flex-wrap:wrap;gap:6px 12px;color:var(--muted);font-size:.78rem;margin-top:7px}
+.review-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.payment-status{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 9px;font-size:.72rem;font-weight:900}
+.ps-WAITING_PAYMENT{background:#eef2f7;color:#4b5563}
+.ps-PROCESSING{background:#fff3cd;color:#7a5700}
+.ps-PENDING_REVIEW{background:#fff1db;color:#92400e}
+.ps-APPROVED{background:#dff4e9;color:#176a43}
+.ps-REJECTED{background:#fde8e7;color:#b42318}
+.integration-grid{display:grid;grid-template-columns:1fr;gap:12px}
+.integration-card{border:1px solid var(--line);background:var(--card);border-radius:14px;padding:14px}
+.code-note{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem;padding:10px;border-radius:10px;background:var(--secondary);overflow:auto;white-space:pre-wrap}
+.audit-list{display:grid;gap:8px}
+.audit-item{border-left:3px solid var(--primary);padding:9px 11px;background:var(--secondary);border-radius:9px;font-size:.8rem}
+.receipt-thumb{width:56px;height:56px;border-radius:10px;background:var(--secondary);display:grid;place-items:center;color:var(--primary);overflow:hidden}
+.receipt-thumb img{width:100%;height:100%;object-fit:cover}
+@media(min-width:720px){.admin-dashboard{grid-template-columns:repeat(5,minmax(0,1fr))}.integration-grid{grid-template-columns:repeat(2,1fr)}}
+
+
+.container{max-width:1240px} .delivery-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:30px 0 22px}.delivery-heading h2{font-size:clamp(26px,4vw,38px);letter-spacing:-.035em;margin:7px 0}.delivery-heading p{margin:0}.eyebrow{font-size:12px;font-weight:800;letter-spacing:.13em;color:var(--primary)}.delivery-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px}.delivery-route{padding:22px}.delivery-route label{display:block;font-size:14px;font-weight:600;margin:16px 0 8px}.delivery-route .map{height:340px;margin-top:18px;border-radius:14px}.origin-caption{font-size:14px;color:var(--muted);padding:12px 0}.ticket-preview{align-self:start;position:sticky;top:90px;padding:24px}.ticket-preview h3{font-size:24px;margin:8px 0 24px}.ticket-row{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--line);font-size:14px}.ticket-row.total{font-size:24px;font-weight:800;border:none;padding:20px 0}.ticket-row.total span:first-child{font-size:16px}.doc-counter{display:flex;gap:8px;align-items:center;margin:14px 0}.doc-counter input{width:90px}.catalog-title{font-size:24px;letter-spacing:-.02em;margin:24px 0 4px}.product-visual{background:var(--secondary)}.product-visual svg{width:64px;height:64px}#socialLinks{display:flex;gap:9px;flex-wrap:wrap;margin-top:24px}#socialLinks a{width:40px;height:40px;display:grid;place-items:center;border:1px solid var(--line);border-radius:12px;color:var(--text)}#socialLinks svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8}.pin-label{background:var(--primary);color:white;padding:7px 10px;border-radius:9px;font:600 13px Inter,sans-serif;white-space:nowrap;box-shadow:0 3px 8px #0003}.pin-label.destination{background:#ed8630}.map-pick-help{font-size:14px;padding:10px;color:var(--muted)}.drawer{width:min(520px,100%)}.grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}.notice{font-size:14px}.input,.textarea,.select{font-size:16px}.icon-option svg{width:30px;height:30px}.setup-note{padding:12px;border:1px dashed var(--line);border-radius:12px;font-size:14px;margin-bottom:15px}.total-line.grand{font-size:22px}body.dark-mode .eyebrow{color:#60c5bd}body.dark-mode .origin-caption{color:#a6b7c6}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #ef8d32;outline-offset:3px}.fab-whatsapp{bottom:20px}@media(max-width:900px){.delivery-layout{grid-template-columns:minmax(0,1fr)}.ticket-preview{position:static}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.delivery-heading{align-items:flex-start}.delivery-heading>button{display:none}}@media(max-width:520px){.grid{grid-template-columns:1fr}.delivery-route{padding:16px}.delivery-route .map{height:300px}.delivery-heading{margin-top:20px}.header{gap:7px}.brand-copy h1{font-size:16px}.brand-copy p{font-size:12px}.ticket-row.total{font-size:22px}}
+
+</style>
+</head>
+<body>
+<div class="topbar"><div class="container header">
+  <div class="brand">
+    <div class="brand-logo" id="brandLogo"></div>
+    <div class="brand-copy"><h1 id="brandName">Maniobras Manzanillo</h1><p id="brandTagline">Entrega de documentos y papelería</p></div>
+  </div>
+  <button class="icon-btn theme-btn" id="themeBtn" aria-label="Cambiar tema"></button>
+  <button class="icon-btn" id="adminBtn" aria-label="Administración"></button>
+  <button class="icon-btn cart-btn" id="cartBtn" aria-label="Carrito"><span class="badge-count" id="cartCount">0</span></button>
+</div></div>
+<main>
+  <section class="hero" style="display:none"><div class="container"><div class="hero-card"><h2 id="heroTitle">Entrega de maniobras</h2><p id="heroText">Selecciona tu punto de entrega, añade papelería y revisa el total de tu servicio.</p></div></div></section>
+  <section class="container" id="deliveryWorkspace">
+    <div class="delivery-heading"><div><span class="eyebrow">DOCUMENTOS Y PAPELERÍA</span><h2>Programa tu entrega</h2><p class="muted">Elige el destino y prepara lo que necesitas enviar.</p></div><button class="btn" id="continueDelivery"></button></div>
+    <div class="delivery-layout"><div class="section-card delivery-route"><div class="row"><strong>Ruta de entrega</strong><span class="muted small">Origen del proveedor</span></div><div class="origin-caption" id="publicOrigin"></div><label for="streetSearch">Calle, colonia y ciudad de entrega</label><div class="row"><input id="streetSearch" class="input" placeholder="Ej. Av. Elías Zamora, Salagua, Manzanillo"><button id="findStreet" class="btn" aria-label="Buscar calle"></button></div><div id="streetResults" class="stack" role="status"></div><div id="publicDeliveryMap" class="map"></div><div class="notice" id="publicDistance">Busca la calle o marca el destino en el mapa.</div><div class="admin-grid two"><div class="field"><label for="siteNumber">Número de vivienda / sitio</label><input id="siteNumber" class="input" placeholder="Ej. 125, local 3 o S/N"></div><div class="field"><label for="deliveryReference">Referencias</label><input id="deliveryReference" class="input" placeholder="Color, fachada, entre calles"></div></div></div><aside class="section-card ticket-preview"><span class="eyebrow">TU SOLICITUD</span><h3>Resumen de costos</h3><div id="liveTicket"></div><button id="reviewDelivery" class="btn full"></button><p class="small muted">Revisa tus datos antes de generar la orden.</p><nav id="socialLinks" aria-label="Redes sociales"></nav></aside></div>
+  </section>
+  <div class="container"><h2 class="catalog-title">Papelería para tu entrega</h2><p class="muted">Añade los complementos que necesitas. Los documentos se indican en tu solicitud.</p></div>
+  <section class="container controls">
+    <div class="search-wrap" id="searchWrap"><input id="searchInput" placeholder="Buscar papelería" /></div>
+    <div class="chips" id="categoryChips"></div>
+  </section>
+  <section class="container grid" id="catalogGrid"></section>
+</main>
+<button class="fab-whatsapp" id="whatsappFab" aria-label="WhatsApp"></button>
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="cartDrawer" aria-hidden="true">
+  <div class="drawer-head"><div><strong>Tu pedido</strong><div class="small muted" id="cartSubtitle">Revisa productos y datos</div></div><button class="icon-btn" data-close-drawer aria-label="Cerrar"></button></div>
+  <div class="drawer-body" id="cartBody"></div>
+  <div class="drawer-foot" id="cartFoot"></div>
+</aside>
+<div class="modal" id="summaryModal"><div class="modal-head"><strong>Resumen de tu pedido</strong><button class="icon-btn" data-close-modal="summaryModal" aria-label="Cerrar"></button></div><div class="modal-body" id="summaryBody"></div></div>
+<div class="modal" id="pinModal"><div class="modal-head"><strong>Acceso de administrador</strong><button class="icon-btn" data-close-modal="pinModal" aria-label="Cerrar"></button></div><div class="modal-body"><div class="section-card"><div class="field"><label>Correo</label><input class="input" type="email" autocomplete="username" id="adminEmailInput" placeholder="correo@ejemplo.com"></div><div class="field"><label>Contraseña</label><input class="input" type="password" autocomplete="current-password" id="adminPasswordInput" placeholder="Ingresa tu contraseña"></div><button class="btn full" id="pinSubmit"></button><div class="small muted" style="margin-top:10px">El acceso se valida con Supabase Auth. Usa el correo y contraseña creados en Authentication.</div><div class="supabase-status" id="supabaseStatus" data-kind="warn"></div></div></div></div>
+<div class="modal admin-modal" id="adminModal"><div class="modal-head"><strong>Panel de administración</strong><button class="icon-btn" data-close-modal="adminModal" aria-label="Cerrar"></button></div><div class="modal-body"><div class="admin-layout"><nav class="admin-tabs" id="adminTabs"></nav><section class="admin-content" id="adminContent"></section></div></div></div>
+<div class="toast-wrap" id="toastWrap"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.min.js"></script>
+<script>
+'use strict';
+
+/* ==============================
+   SVG ICONS
+============================== */
+const UI = {
+  cart:`<svg viewBox="0 0 24 24"><path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 1.9-1.4L21 7H6.2"/><circle cx="10" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/></svg>`,
+  search:`<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>`,
+  close:`<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>`,
+  plus:`<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>`,
+  minus:`<svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>`,
+  trash:`<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>`,
+  edit:`<svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16v4zM13.5 6.5l4 4"/></svg>`,
+  copy:`<svg viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>`,
+  check:`<svg viewBox="0 0 24 24"><path d="m5 12 4 4 10-10"/></svg>`,
+  settings:`<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21h-4v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3v-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V3h4v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1v4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>`,
+  lock:`<svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>`,
+  map:`<svg viewBox="0 0 24 24"><path d="M4 5l5-2 6 2 5-2v16l-5 2-6-2-5 2zM9 3v16M15 5v16"/></svg>`,
+  pin:`<svg viewBox="0 0 24 24"><path d="M12 21s7-5.8 7-12a7 7 0 1 0-14 0c0 6.2 7 12 7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>`,
+  bike:`<svg viewBox="0 0 24 24"><circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M6 17l4-7h4l4 7M9 10l-2-3h3M12 17l-3-7M13 7h3"/></svg>`,
+  moto:`<svg viewBox="0 0 24 24"><circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M8.5 17h5l2-5h3M9 11h5l2 2M11 8h3"/></svg>`,
+  car:`<svg viewBox="0 0 24 24"><path d="M4 16v-5l2-4h12l2 4v5M6 16h12M7 11h10"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>`,
+  truck:`<svg viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>`,
+  fuel:`<svg viewBox="0 0 24 24"><path d="M5 21V4h10v17M4 21h12M7 7h6v5H7zM15 8h2l2 2v7a2 2 0 0 0 4 0v-6l-2-2"/></svg>`,
+  calc:`<svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"/></svg>`,
+  orders:`<svg viewBox="0 0 24 24"><path d="M7 4h10v3H7zM5 7h14v14H5zM8 11h8M8 15h8"/></svg>`,
+  download:`<svg viewBox="0 0 24 24"><path d="M12 4v11M8 11l4 4 4-4M5 20h14"/></svg>`,
+  attach:`<svg viewBox="0 0 24 24"><path d="M8 12l6-6a4 4 0 0 1 6 6l-8 8a6 6 0 0 1-8-8l8-8"/></svg>`,
+  arrowLeft:`<svg viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>`,
+  arrowRight:`<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`,
+  pending:`<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>`,
+  paid:`<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m8 12 2.5 2.5L16 9"/></svg>`,
+  delivered:`<svg viewBox="0 0 24 24"><path d="M4 6h10v10H4zM14 9h4l2 3v4h-6z"/><circle cx="8" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>`,
+  whatsapp:`<svg viewBox="0 0 24 24" fill="none"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6z" stroke="currentColor" stroke-width="1.9"/><path d="M9.2 8.2c.2-.5.5-.5.8-.5h.5c.2 0 .4 0 .6.5l.8 1.9c.1.3.1.5-.1.7l-.6.7c-.2.2-.2.4-.1.6.4.8 1.1 1.5 1.9 2 .2.1.4.1.6-.1l.8-1c.2-.2.4-.3.7-.2l1.8.8c.3.1.5.3.5.5 0 .5-.2 1.5-.8 2-.6.6-1.4.8-2.3.6-1.1-.2-2.6-.8-4.2-2.2-1.3-1.2-2.3-2.6-2.6-3.7-.3-.9-.1-2 .5-2.6z" fill="currentColor" stroke="none"/></svg>`,
+  products:`<svg viewBox="0 0 24 24"><path d="M4 6h16v14H4zM8 6V4h8v2M8 10h8"/></svg>`,
+  palette:`<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18h1.5a2 2 0 0 0 0-4H12a2 2 0 0 1 0-4h4a5 5 0 0 0 5-5c0-3-3.5-5-9-5z"/><circle cx="7.5" cy="9" r="1"/><circle cx="10" cy="6.5" r="1"/><circle cx="15" cy="6.5" r="1"/></svg>`,
+  business:`<svg viewBox="0 0 24 24"><path d="M4 21V8l8-5 8 5v13M8 21v-7h8v7M7 9h2M15 9h2"/></svg>`,
+  upload:`<svg viewBox="0 0 24 24"><path d="M12 20V9M8 13l4-4 4 4M5 4h14"/></svg>`,
+  file:`<svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h5"/></svg>`,
+  save:`<svg viewBox="0 0 24 24"><path d="M5 4h12l2 2v14H5zM8 4v6h8V4M8 16h8"/></svg>`,
+  refresh:`<svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M18 10a7 7 0 0 0-12-2M6 14a7 7 0 0 0 12 2"/></svg>`,
+  moon:`<svg viewBox="0 0 24 24"><path d="M20 15.5A8 8 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5z"/></svg>`,
+  sun:`<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`,
+  database:`<svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>`,
+  dashboard:`<svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z"/></svg>`,
+  receipt:`<svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h4"/></svg>`,
+  review:`<svg viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5zM15 4v5h5M8 13l2 2 5-5"/></svg>`,
+  audit:`<svg viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h4"/></svg>`,
+  telegram:`<svg viewBox="0 0 24 24"><path d="M21 4 3 11l7 2 2 7 9-16zM10 13l5-4"/></svg>`,
+  shield:`<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/><path d="m9 12 2 2 4-4"/></svg>`
+
+
+};
+
+const FOOD = {"document": "<svg viewBox=\"0 0 24 24\"><path d=\"M14 3H6v18h12V7zM14 3v5h5M9 12h6M9 16h6\"/></svg>", "pen": "<svg viewBox=\"0 0 24 24\"><path d=\"m4 20 4-1L20 7l-3-3L5 16zM13 8l3 3\"/></svg>", "folder": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 7V5h7l2 3h9v12H3z\"/></svg>", "envelope": "<svg viewBox=\"0 0 24 24\"><rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\"/><path d=\"m3 6 9 7 9-7\"/></svg>", "plastic": "<svg viewBox=\"0 0 24 24\"><path d=\"M4 4h7l2 3h7v14H4zM4 10h16M9 15h6\"/></svg>", "clipboard": "<svg viewBox=\"0 0 24 24\"><rect x=\"5\" y=\"5\" width=\"14\" height=\"16\" rx=\"2\"/><rect x=\"8\" y=\"3\" width=\"8\" height=\"4\" rx=\"1\"/><path d=\"M8 12h8M8 16h6\"/></svg>", "print": "<svg viewBox=\"0 0 24 24\"><path d=\"M7 8V3h10v5M7 16H3V8h18v8h-4M7 13h10v8H7z\"/></svg>", "files": "<svg viewBox=\"0 0 24 24\"><path d=\"M8 7h12v14H8zM16 7V3H4v14h4M11 11h6M11 15h6\"/></svg>", "archive": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 3h18v5H3zM5 8v13h14V8M9 12h6\"/></svg>", "package": "<svg viewBox=\"0 0 24 24\"><path d=\"m3 7 9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10M8 5l9 4\"/></svg>", "notebook": "<svg viewBox=\"0 0 24 24\"><rect x=\"5\" y=\"3\" width=\"15\" height=\"18\" rx=\"1\"/><path d=\"M3 7h4M3 12h4M3 17h4M10 7h6M10 11h6\"/></svg>", "book": "<svg viewBox=\"0 0 24 24\"><path d=\"M12 5C8 3 5 3 2 4v15c4-1 7-1 10 1 3-2 6-2 10-1V4c-3-1-6-1-10 1zM12 5v15\"/></svg>", "calendar": "<svg viewBox=\"0 0 24 24\"><rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M7 3v4M17 3v4M3 11h18M7 15h3M14 15h3\"/></svg>", "ruler": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 7h18v10H3zM7 7v4M11 7v6M15 7v4M19 7v6\"/></svg>", "scissors": "<svg viewBox=\"0 0 24 24\"><circle cx=\"6\" cy=\"6\" r=\"3\"/><circle cx=\"6\" cy=\"18\" r=\"3\"/><path d=\"m8 8 13 13M8 16 21 3\"/></svg>", "stamp": "<svg viewBox=\"0 0 24 24\"><path d=\"M5 17h14v4H5zM7 17v-4h10v4M10 13V7a3 3 0 1 1 4 0v6\"/></svg>", "card": "<svg viewBox=\"0 0 24 24\"><rect x=\"2\" y=\"4\" width=\"20\" height=\"16\" rx=\"2\"/><circle cx=\"7\" cy=\"10\" r=\"2\"/><path d=\"M4 16h6M13 9h6M13 13h6\"/></svg>", "receipt": "<svg viewBox=\"0 0 24 24\"><path d=\"M5 3h14v18l-3-2-4 2-4-2-3 2zM8 7h8M8 11h8M8 15h5\"/></svg>", "briefcase": "<svg viewBox=\"0 0 24 24\"><rect x=\"3\" y=\"7\" width=\"18\" height=\"14\" rx=\"2\"/><path d=\"M8 7V3h8v4M3 12h18M10 12v3h4v-3\"/></svg>", "paperclip": "<svg viewBox=\"0 0 24 24\"><path d=\"m9 17 8-8a3 3 0 0 0-4-4L4 14a5 5 0 0 0 7 7l9-9M8 14l6-6\"/></svg>", "roll": "<svg viewBox=\"0 0 24 24\"><path d=\"M7 7a4 4 0 1 1 8 0v14H7zM15 7h5v10h-5M9 11h4M9 15h4\"/></svg>", "box": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 7h18v14H3zM3 7l3-4h12l3 4M9 11h6\"/></svg>", "badge": "<svg viewBox=\"0 0 24 24\"><path d=\"M7 3h10v5l4 4-9 9-9-9 4-4z\"/><circle cx=\"12\" cy=\"6\" r=\"1\"/></svg>", "shield": "<svg viewBox=\"0 0 24 24\"><path d=\"m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6zM8 12l3 3 5-6\"/></svg>", "clock": "<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v6l4 2\"/></svg>", "map": "<svg viewBox=\"0 0 24 24\"><path d=\"m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2zM9 3v16M15 5v16\"/></svg>", "pin": "<svg viewBox=\"0 0 24 24\"><path d=\"M12 21s7-7 7-12a7 7 0 0 0-14 0c0 5 7 12 7 12z\"/><circle cx=\"12\" cy=\"9\" r=\"2\"/></svg>", "route": "<svg viewBox=\"0 0 24 24\"><circle cx=\"5\" cy=\"5\" r=\"2\"/><circle cx=\"19\" cy=\"19\" r=\"2\"/><path d=\"M7 5h9a4 4 0 0 1 0 8H8a3 3 0 0 0 0 6h9\"/></svg>", "phone": "<svg viewBox=\"0 0 24 24\"><path d=\"m5 3 4 1 1 5-3 2a16 16 0 0 0 6 6l2-3 5 1 1 4c-1 6-19-4-18-13z\"/></svg>", "calculator": "<svg viewBox=\"0 0 24 24\"><rect x=\"5\" y=\"2\" width=\"14\" height=\"20\" rx=\"2\"/><path d=\"M8 6h8M8 11h2M14 11h2M8 15h2M14 15h2M8 19h2M14 19h2\"/></svg>", "car": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 16v-5l3-5h12l3 5v5zM6 11h12\"/><circle cx=\"6\" cy=\"17\" r=\"2\"/><circle cx=\"18\" cy=\"17\" r=\"2\"/></svg>", "bike": "<svg viewBox=\"0 0 24 24\"><circle cx=\"5\" cy=\"17\" r=\"4\"/><circle cx=\"19\" cy=\"17\" r=\"4\"/><path d=\"m5 17 5-8 5 8H5M8 6h4M15 9h3l1 8\"/></svg>", "fuel": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 21V3h11v18M6 6h5v5H6zM14 9h3v9h3V7l-3-3M2 21h13\"/></svg>", "building": "<svg viewBox=\"0 0 24 24\"><path d=\"M4 21V3h16v18M2 21h20M8 7h2M14 7h2M8 11h2M14 11h2M10 21v-6h4v6\"/></svg>", "warehouse": "<svg viewBox=\"0 0 24 24\"><path d=\"m2 9 10-6 10 6v12H2zM7 21V11h10v10M7 15h10M7 18h10\"/></svg>", "globe": "<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><ellipse cx=\"12\" cy=\"12\" rx=\"4\" ry=\"9\"/><path d=\"M3 12h18M5 7h14M5 17h14\"/></svg>", "camera": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 6h5l2-3h4l2 3h5v15H3z\"/><circle cx=\"12\" cy=\"13\" r=\"4\"/></svg>", "bank": "<svg viewBox=\"0 0 24 24\"><path d=\"m2 7 10-5 10 5zM3 21h18M5 10v8M10 10v8M15 10v8M20 10v8\"/></svg>", "wallet": "<svg viewBox=\"0 0 24 24\"><rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 6V3h14v2M21 11h-7v5h7\"/><circle cx=\"17\" cy=\"13.5\" r=\".5\"/></svg>", "bag": "<svg viewBox=\"0 0 24 24\"><path d=\"M4 7h16v14H4zM8 7V5a4 4 0 0 1 8 0v2\"/></svg>", "key": "<svg viewBox=\"0 0 24 24\"><circle cx=\"7\" cy=\"8\" r=\"5\"/><path d=\"m11 12 9 9M16 17l3-3M18 19l3-3\"/></svg>", "lock": "<svg viewBox=\"0 0 24 24\"><rect x=\"5\" y=\"10\" width=\"14\" height=\"11\" rx=\"2\"/><path d=\"M8 10V6a4 4 0 0 1 8 0v4M12 14v3\"/></svg>", "cloud": "<svg viewBox=\"0 0 24 24\"><path d=\"M6 18a5 5 0 1 1 1-10 6 6 0 0 1 11 1 4 4 0 0 1 0 9z\"/></svg>", "send": "<svg viewBox=\"0 0 24 24\"><path d=\"m2 3 20 9-20 9 4-9zM6 12h16\"/></svg>", "checklist": "<svg viewBox=\"0 0 24 24\"><path d=\"m3 6 2 2 3-4M11 6h10M3 14l2 2 3-4M11 14h10M11 20h10\"/></svg>", "signature": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 18c7-14 6-16 4-15-3 3-3 12 1 12 2 0 3-4 4-3s-1 5 2 4 3-3 5-1M3 21h18\"/></svg>", "filepdf": "<svg viewBox=\"0 0 24 24\"><path d=\"M14 3H5v18h14V8zM14 3v5h5M8 13h8M8 17h5\"/></svg>", "fileimage": "<svg viewBox=\"0 0 24 24\"><path d=\"M14 3H5v18h14V8zM14 3v5h5M7 18l3-5 3 3 2-2 2 4z\"/></svg>", "filetext": "<svg viewBox=\"0 0 24 24\"><path d=\"M14 3H5v18h14V8zM14 3v5h5M8 11h8M8 14h8M8 17h8\"/></svg>", "folderopen": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 20V5h7l2 3h8v3M3 20l4-9h15l-4 9z\"/></svg>", "folders": "<svg viewBox=\"0 0 24 24\"><path d=\"M7 7V5h6l2 3h7v13H7zM3 17V2h6l2 3\"/></svg>", "filecheck": "<svg viewBox=\"0 0 24 24\"><path d=\"M14 3H5v18h14V8zM14 3v5h5M8 14l3 3 5-6\"/></svg>", "fileclock": "<svg viewBox=\"0 0 24 24\"><path d=\"M14 3H5v18h4M14 3v5h5v3\"/><circle cx=\"16\" cy=\"17\" r=\"5\"/><path d=\"M16 14v3h2\"/></svg>", "filelock": "<svg viewBox=\"0 0 24 24\"><path d=\"M14 3H5v18h4M14 3v5h5v3M13 16v-2a3 3 0 0 1 6 0v2\"/><rect x=\"11\" y=\"16\" width=\"10\" height=\"6\"/></svg>", "fileupload": "<svg viewBox=\"0 0 24 24\"><path d=\"M14 3H5v18h14V8zM14 3v5h5M12 18v-7M9 14l3-3 3 3\"/></svg>", "filedownload": "<svg viewBox=\"0 0 24 24\"><path d=\"M14 3H5v18h14V8zM14 3v5h5M12 11v7M9 15l3 3 3-3\"/></svg>", "contact": "<svg viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><circle cx=\"12\" cy=\"9\" r=\"3\"/><path d=\"M7 18c0-5 10-5 10 0M2 7h3M2 12h3M2 17h3\"/></svg>", "headset": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 14v-3a9 9 0 0 1 18 0v6c0 4-4 4-7 4\"/><rect x=\"2\" y=\"11\" width=\"4\" height=\"7\" rx=\"1\"/><rect x=\"18\" y=\"11\" width=\"4\" height=\"7\" rx=\"1\"/></svg>", "mailbox": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 18V9a6 6 0 0 1 12 0v9zM9 3h7a6 6 0 0 1 6 6v9H9M11 18v4M6 10h6\"/></svg>", "stack": "<svg viewBox=\"0 0 24 24\"><path d=\"m2 7 10-5 10 5-10 5zM2 12l10 5 10-5M2 17l10 5 10-5\"/></svg>", "container": "<svg viewBox=\"0 0 24 24\"><rect x=\"2\" y=\"5\" width=\"20\" height=\"14\"/><path d=\"M6 5v14M10 5v14M14 5v14M18 5v14\"/></svg>", "anchor": "<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"4\" r=\"2\"/><path d=\"M12 6v16M8 10h8M3 14v3c0 3 9 5 9 5s9-2 9-5v-3M1 16l2-2 2 2M19 16l2-2 2 2\"/></svg>", "compass": "<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"m16 8-3 5-5 3 3-5z\"/></svg>", "location": "<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"7\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/><path d=\"M12 1v4M12 19v4M1 12h4M19 12h4\"/></svg>", "delivery": "<svg viewBox=\"0 0 24 24\"><path d=\"M2 6h12v11H2zM14 10h4l4 4v3h-8\"/><circle cx=\"6\" cy=\"19\" r=\"2\"/><circle cx=\"18\" cy=\"19\" r=\"2\"/></svg>", "qr": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h3v3h3v3h-6zM12 3v3M12 9v3M3 12h6M18 12h3M12 18v3\"/></svg>", "invoice": "<svg viewBox=\"0 0 24 24\"><path d=\"M5 3h14v18l-3-2-4 2-4-2-3 2zM8 7h8M8 11h8M8 15h5\"/></svg>", "copy": "<svg viewBox=\"0 0 24 24\"><rect x=\"8\" y=\"8\" width=\"13\" height=\"13\" rx=\"2\"/><path d=\"M16 8V3H3v13h5\"/></svg>", "certificate": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 3h18v13H3zM7 7h10M7 11h4\"/><circle cx=\"16\" cy=\"16\" r=\"3\"/><path d=\"m14 18-1 4 3-1 3 1-1-4\"/></svg>", "filezip": "<svg viewBox=\"0 0 24 24\"><path d=\"M14 3H5v18h14V8zM14 3v5h5M10 3v13M8 16h4v3H8zM8 7h4M8 11h4\"/></svg>", "notepad": "<svg viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"4\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"M8 2v4M16 2v4M8 10h8M8 14h8M8 18h5\"/></svg>", "bookmark": "<svg viewBox=\"0 0 24 24\"><path d=\"M6 3h12v18l-6-4-6 4z\"/></svg>", "eraser": "<svg viewBox=\"0 0 24 24\"><path d=\"m3 14 10-11 9 8-9 10H9zM8 9l9 8M13 21h9\"/></svg>", "pencil": "<svg viewBox=\"0 0 24 24\"><path d=\"m3 21 2-7L16 3l5 5-11 11zM13 6l5 5M3 21l7-2\"/></svg>", "highlighter": "<svg viewBox=\"0 0 24 24\"><path d=\"m4 15 9-12 7 5-9 12zM5 19l-2 3h7l1-2M9 9l7 5\"/></svg>", "palette": "<svg viewBox=\"0 0 24 24\"><path d=\"M12 3a9 9 0 1 0 0 18h2a2 2 0 0 0 0-4 2 2 0 0 1 0-4h4c6 0 1-10-6-10z\"/><circle cx=\"7\" cy=\"8\" r=\"1\"/><circle cx=\"12\" cy=\"6\" r=\"1\"/><circle cx=\"17\" cy=\"8\" r=\"1\"/><circle cx=\"5\" cy=\"13\" r=\"1\"/></svg>", "pinboard": "<svg viewBox=\"0 0 24 24\"><path d=\"M7 3h10M9 3v6l-3 5h12l-3-5V3M12 14v8\"/></svg>", "usb": "<svg viewBox=\"0 0 24 24\"><path d=\"M12 21V4M9 7l3-4 3 4M12 16l6-5V7M12 12 6 9V6\"/><circle cx=\"6\" cy=\"5\" r=\"1\"/><rect x=\"17\" y=\"4\" width=\"2\" height=\"3\"/></svg>", "laptop": "<svg viewBox=\"0 0 24 24\"><path d=\"M4 16V3h16v13M2 16h20l-2 5H4z\"/></svg>", "monitor": "<svg viewBox=\"0 0 24 24\"><rect x=\"2\" y=\"3\" width=\"20\" height=\"14\" rx=\"1\"/><path d=\"M12 17v4M7 21h10\"/></svg>", "filter": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 3h18l-7 9v8l-4 2V12z\"/></svg>", "search": "<svg viewBox=\"0 0 24 24\"><circle cx=\"10\" cy=\"10\" r=\"7\"/><path d=\"m15 15 6 6\"/></svg>", "settings": "<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2\"/></svg>", "handshake": "<svg viewBox=\"0 0 24 24\"><path d=\"m2 9 5-5 5 2 5-2 5 5-4 8-5 4-6-3zM12 6l-4 5 3 2 4-3 5 5M7 18l2-3\"/></svg>", "users": "<svg viewBox=\"0 0 24 24\"><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M2 21v-3c0-7 14-7 14 0v3M17 3a4 4 0 0 1 0 8M19 14c3 0 3 5 3 7\"/></svg>", "user": "<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"7\" r=\"4\"/><path d=\"M4 21v-3c0-8 16-8 16 0v3\"/></svg>", "home": "<svg viewBox=\"0 0 24 24\"><path d=\"m2 11 10-9 10 9M5 9v12h14V9M9 21v-8h6v8\"/></svg>", "megaphone": "<svg viewBox=\"0 0 24 24\"><path d=\"m3 9 18-6v16L3 13zM6 14l2 7h4l-2-6\"/></svg>", "bell": "<svg viewBox=\"0 0 24 24\"><path d=\"M5 17V9a7 7 0 0 1 14 0v8l2 2H3zM9 21h6\"/></svg>", "chat": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 3h18v14H9l-6 5zM7 8h10M7 12h7\"/></svg>", "list": "<svg viewBox=\"0 0 24 24\"><path d=\"M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1\"/></svg>", "grid": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z\"/></svg>", "chart": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 3v18h18M7 17v-6M12 17V6M17 17V9\"/></svg>", "pie": "<svg viewBox=\"0 0 24 24\"><path d=\"M12 3a9 9 0 1 0 9 9h-9zM15 3v6h6a7 7 0 0 0-6-6z\"/></svg>", "weigh": "<svg viewBox=\"0 0 24 24\"><path d=\"M12 3v18M6 21h12M4 7h16M5 7l-3 7h6zM19 7l-3 7h6z\"/></svg>", "hand": "<svg viewBox=\"0 0 24 24\"><path d=\"M7 13V5a2 2 0 0 1 4 0v6-8a2 2 0 0 1 4 0v8-6a2 2 0 0 1 4 0v7c4-2 4 2 2 5l-3 5H9l-7-9c-2-3 1-4 5 0z\"/></svg>", "moto": "<svg viewBox=\"0 0 24 24\"><circle cx=\"5\" cy=\"17\" r=\"4\"/><circle cx=\"19\" cy=\"17\" r=\"4\"/><path d=\"M9 17h5l3-8h3M8 11h6M14 5h3l2 12\"/></svg>", "flag": "<svg viewBox=\"0 0 24 24\"><path d=\"M4 22V3h16l-3 5 3 5H4\"/></svg>", "navigation": "<svg viewBox=\"0 0 24 24\"><path d=\"m12 2 9 20-9-5-9 5z\"/></svg>", "link": "<svg viewBox=\"0 0 24 24\"><path d=\"m9 15 6-6M7 14l-2 2a4 4 0 0 0 6 6l4-4M9 6l4-4a4 4 0 0 1 6 6l-2 2\"/></svg>", "heart": "<svg viewBox=\"0 0 24 24\"><path d=\"M12 21 3 12C-2 3 8 0 12 6c4-6 14-3 9 6z\"/></svg>", "star": "<svg viewBox=\"0 0 24 24\"><path d=\"m12 2 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z\"/></svg>", "award": "<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"8\" r=\"6\"/><path d=\"m8 13-2 9 6-3 6 3-2-9\"/></svg>", "help": "<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M9 8c1-4 8-3 6 1l-3 3v2M12 17h.1\"/></svg>", "info": "<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 6h.1M12 10v8\"/></svg>", "eye": "<svg viewBox=\"0 0 24 24\"><path d=\"M2 12c5-10 15-10 20 0-5 10-15 10-20 0z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/></svg>", "upload": "<svg viewBox=\"0 0 24 24\"><path d=\"M12 17V3M6 9l6-6 6 6M3 17v4h18v-4\"/></svg>", "download": "<svg viewBox=\"0 0 24 24\"><path d=\"M12 3v14M6 11l6 6 6-6M3 17v4h18v-4\"/></svg>", "tray": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 14V3h18v11M2 14h6l2 3h4l2-3h6v7H2z\"/></svg>", "database": "<svg viewBox=\"0 0 24 24\"><ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/><path d=\"M3 5v14c0 4 18 4 18 0V5M3 12c0 4 18 4 18 0\"/></svg>", "save": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 3h15l3 3v15H3zM7 3v6h10V3M7 21v-8h10v8\"/></svg>", "refresh": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 10a9 9 0 0 1 15-6l3 3M21 2v5h-5M21 14A9 9 0 0 1 6 20l-3-3M3 22v-5h5\"/></svg>", "cart": "<svg viewBox=\"0 0 24 24\"><path d=\"M2 3h3l3 13h11l3-10H6\"/><circle cx=\"9\" cy=\"21\" r=\"1\"/><circle cx=\"19\" cy=\"21\" r=\"1\"/></svg>", "barcode": "<svg viewBox=\"0 0 24 24\"><path d=\"M2 4v16M5 4v16M8 4v16M10 4v16M14 4v16M17 4v16M19 4v16M22 4v16\"/></svg>", "battery": "<svg viewBox=\"0 0 24 24\"><rect x=\"2\" y=\"6\" width=\"18\" height=\"12\" rx=\"2\"/><path d=\"M22 10v4M6 10v4M10 10v4M14 10v4\"/></svg>", "bolt": "<svg viewBox=\"0 0 24 24\"><path d=\"m13 2-9 12h7l-1 8 10-13h-8z\"/></svg>", "code": "<svg viewBox=\"0 0 24 24\"><path d=\"m7 6-6 6 6 6M17 6l6 6-6 6M14 3l-4 18\"/></svg>", "wifi": "<svg viewBox=\"0 0 24 24\"><path d=\"M2 7c5-5 15-5 20 0M5 11c4-4 10-4 14 0M8 15c2-2 6-2 8 0M12 19h.1\"/></svg>", "coffee": "<svg viewBox=\"0 0 24 24\"><path d=\"M3 7h14v11c0 5-14 5-14 0zM17 8h3c5 0 5 8-3 8M6 2v3M12 2v3\"/></svg>", "sun": "<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 1v3M12 20v3M1 12h3M20 12h3M4 4l2 2M18 18l2 2M4 20l2-2M18 6l2-2\"/></svg>", "moon": "<svg viewBox=\"0 0 24 24\"><path d=\"M21 13A9 9 0 0 1 11 3a9 9 0 1 0 10 10z\"/></svg>", "shopping": "<svg viewBox=\"0 0 24 24\"><path d=\"M4 8h16v13H4zM8 8V5a4 4 0 0 1 8 0v3\"/></svg>", "mouse": "<svg viewBox=\"0 0 24 24\"><rect x=\"5\" y=\"2\" width=\"14\" height=\"20\" rx=\"7\"/><path d=\"M5 10h14M12 2v8\"/></svg>", "keyboard": "<svg viewBox=\"0 0 24 24\"><rect x=\"2\" y=\"5\" width=\"20\" height=\"14\" rx=\"1\"/><path d=\"M5 9h1M9 9h1M13 9h1M17 9h1M5 13h1M9 13h1M13 13h1M17 13h1M6 16h12\"/></svg>", "power": "<svg viewBox=\"0 0 24 24\"><path d=\"M12 2v10M6 5a9 9 0 1 0 12 0\"/></svg>", "message": "<svg viewBox=\"0 0 24 24\"><path d=\"M2 3h20v15H8l-6 4zM6 8h12M6 13h8\"/></svg>", "phonecall": "<svg viewBox=\"0 0 24 24\"><path d=\"m4 3 4 1 1 5-3 2a16 16 0 0 0 7 7l2-3 5 1 1 4c-1 6-20-4-18-14zM14 3c4 0 7 3 7 7M14 7c2 0 3 1 3 3\"/></svg>"};
+FOOD.plate=FOOD.document;FOOD.burger=FOOD.folder;
+const FOOD_PACKS={"Documentos": ["document", "pen", "folder", "envelope", "plastic", "clipboard", "print", "files", "archive", "package", "notebook", "book", "calendar", "ruler", "scissors", "stamp", "card", "receipt", "briefcase", "paperclip", "roll", "box", "badge", "shield", "clock"], "Entrega y contacto": ["map", "pin", "route", "phone", "calculator", "car", "bike", "fuel", "building", "warehouse", "globe", "camera", "bank", "wallet", "bag", "key", "lock", "cloud", "send", "checklist", "signature", "filepdf", "fileimage", "filetext", "folderopen", "folders", "filecheck", "fileclock", "filelock", "fileupload", "filedownload", "contact", "headset", "mailbox", "stack", "container", "anchor", "compass", "location", "delivery"], "Herramientas": ["qr", "invoice", "copy", "certificate", "filezip", "notepad", "bookmark", "eraser", "pencil", "highlighter", "palette", "pinboard", "usb", "laptop", "monitor", "filter", "search", "settings", "handshake", "users", "user", "home", "megaphone", "bell", "chat", "list", "grid", "chart", "pie", "weigh", "hand", "moto", "flag", "navigation", "link", "heart", "star", "award", "help", "info", "eye", "upload", "download", "tray", "database", "save", "refresh", "cart", "barcode", "battery", "bolt", "code", "wifi", "coffee", "sun", "moon", "shopping", "mouse", "keyboard", "power", "message", "phonecall"]};
+let activeFoodPack='Todos';
+function foodIconKeys(){
+  if(activeFoodPack==='Todos')return Object.keys(FOOD);
+  return FOOD_PACKS[activeFoodPack]||Object.keys(FOOD);
+}
+
+/* ==============================
+   SUPABASE
+   Pega la URL del proyecto y la Publishable/anon key.
+   Nunca uses service_role dentro de este archivo.
+============================== */
+const SUPABASE_URL='PEGA_AQUI_URL_SUPABASE';
+const SUPABASE_ANON_KEY='PEGA_AQUI_CLAVE_PUBLICA';
+let supabaseClient=null,adminSession=null,cloudSyncTimer=null,cloudReady=false,supabaseConnectionState='idle',supabaseLastError='';
+function supabaseConfigured(){
+  return /^https:\/\/.+\.supabase\.co$/i.test(SUPABASE_URL)
+    && !SUPABASE_ANON_KEY.includes('PEGA_AQUI');
+}
+
+/* ==============================
+   DATA & STORAGE
+============================== */
+const STORE='maniobrasCatalog_v1';
+const defaults={
+ config:{
+  businessName:'Maniobras Manzanillo',tagline:'Entrega de documentos y papelería',logo:'',whatsapp:'',adminPin:'1234',deliveryEnabled:true,
+  origin:{address:'Centro, Manzanillo, Colima, México',lat:19.0522,lng:-104.3158},
+  map:{provider:'carto',apiKey:'',style:'voyager',attribution:'OpenStreetMap contributors, CARTO'},
+  payments:[{id:'pay1',title:'Transferencia bancaria',data:'Configura tus datos bancarios en Administración'},{id:'pay2',title:'Pago por acordar',data:'Confirma el método con el proveedor'}],
+  shipping:{base:0,perKm:8,margin:20,rounding:5,freeFrom:0,roundTrip:false,vehicle:'moto',fuel:'Magna',efficiency:{moto:28,auto:13,truck:9,bike:9999},fuelPrice:{Magna:24.5,Premium:26.4,'Diésel':25.9}},
+  design:{primary:'#176b6b',secondary:'#edf8f7',accent:'#ef8d32',text:'#232323',card:'#ffffff',siteBg:'#f7f7f9',bgType:'solid',grad1:'#f7f7f9',grad2:'#fff0e6',gradAngle:135,bgImage:'',bgOpacity:.18,pattern:false,patternOpacity:.055,iconColor:'#176b6b',iconSize:72,font:'Inter',rounded:true}
+ },
+ products:[{"id": "servicio", "name": "Servicio de entrega de maniobras", "description": "Costo fijo por solicitud, adicional al viaje.", "category": "Servicio", "price": 35, "stock": 999999, "icon": "delivery", "image": "", "active": true}, {"id": "documentos", "name": "Maniobras / documentos", "description": "Indica cuántos documentos necesitas entregar.", "category": "Documentos", "price": 0, "stock": 999999, "icon": "files", "image": "", "active": true}, {"id": "lapicero", "name": "Lapicero", "description": "Complemento opcional para tu entrega.", "category": "Papelería", "price": 8, "stock": 100, "icon": "pen", "image": "", "active": true}, {"id": "carpeta", "name": "Carpeta", "description": "Complemento opcional para tu entrega.", "category": "Papelería", "price": 15, "stock": 100, "icon": "folder", "image": "", "active": true}, {"id": "sobre", "name": "Carpeta tipo sobre", "description": "Complemento opcional para tu entrega.", "category": "Papelería", "price": 12, "stock": 100, "icon": "envelope", "image": "", "active": true}, {"id": "plastico", "name": "Folder de plástico", "description": "Complemento opcional para tu entrega.", "category": "Papelería", "price": 10, "stock": 100, "icon": "plastic", "image": "", "active": true}],
+ cart:{servicio:1,documentos:1},orders:[],folioSeq:1
+};
+let state=load();
+let currentCategory='Todos',searchTerm='',customerMarker=null,clientMap=null,originMap=null,originMarker=null,tripMap=null,tripOriginMarker=null,tripDestMarker=null,tripRouteLayer=null,lastPdfBlob=null,lastPdfName='',lastOrderId=null;
+let checkout={delivery:'delivery',address:'',lat:null,lng:null,distance:0,shipping:0,name:'',phone:'',notes:'',paymentId:'',proofFile:null,proofUrl:'',proofName:''};
+function deepClone(o){return JSON.parse(JSON.stringify(o));}
+function load(){try{const x=JSON.parse(localStorage.getItem(STORE)||'null');return x?merge(defaults,x):deepClone(defaults)}catch(e){return deepClone(defaults)}}
+function merge(base,extra){if(Array.isArray(base))return Array.isArray(extra)?extra:base; if(base&&typeof base==='object'){const out={...base};for(const k in extra)out[k]=k in base?merge(base[k],extra[k]):extra[k];return out}return extra??base}
+function saveLocal(){localStorage.setItem(STORE,JSON.stringify(state))}
+function save(){
+  saveLocal();
+  if(adminSession&&supabaseClient){
+    clearTimeout(cloudSyncTimer);
+    cloudSyncTimer=setTimeout(()=>syncAdminStateToCloud().catch(e=>console.error(e)),700);
+  }
+}
+function publicConfigForCloud(){
+  const cfg=deepClone(state.config);
+  delete cfg.adminPin;
+  return cfg;
+}
+
+function setSupabaseStatus(kind,message){
+  supabaseConnectionState=kind;
+  supabaseLastError=message||'';
+  const el=document.getElementById('supabaseStatus');
+  if(!el)return;
+  el.dataset.kind=kind==='ok'?'ok':kind==='error'?'error':'warn';
+  el.innerHTML=(kind==='ok'?UI.check:kind==='error'?UI.close:UI.database)+`<span>${esc(message)}</span>`;
+}
+function explainSupabaseError(error){
+  const msg=String(error?.message||error?.error_description||error||'Error desconocido');
+  if(/Invalid API key|No API key/i.test(msg))return 'La clave pública de Supabase no es válida.';
+  if(/Failed to fetch|NetworkError|fetch/i.test(msg))return 'No se pudo alcanzar Supabase por red. Revisa la URL del proyecto.';
+  if(/relation .* does not exist|Could not find the table/i.test(msg))return 'Supabase responde, pero faltan las tablas. Ejecuta supabase-setup.sql.';
+  if(/permission denied|row-level security|policy/i.test(msg))return 'Supabase responde, pero faltan permisos o políticas RLS.';
+  return msg;
+}
+
+function productRow(p,sortOrder=0){
+  return {id:String(p.id),name:p.name,description:p.description||'',category:p.category||'',price:Number(p.price)||0,stock:Math.max(0,Number(p.stock)||0),icon:p.icon||'plate',image:p.image||'',active:p.active!==false,sort_order:sortOrder};
+}
+function rowToProduct(p){
+  return {id:String(p.id),name:p.name,description:p.description||'',category:p.category||'',price:Number(p.price)||0,stock:Number(p.stock)||0,icon:p.icon||'plate',image:p.image||'',active:p.active!==false};
+}
+async function loadPublicCloudState(){
+  if(!supabaseClient)return;
+  const [{data:settings,error:se},{data:products,error:pe}]=await Promise.all([
+    supabaseClient.from('catalog_settings').select('data').eq('id',1).maybeSingle(),
+    supabaseClient.from('products').select('*').order('sort_order',{ascending:true}).order('name',{ascending:true})
+  ]);
+  if(se)throw se;if(pe)throw pe;
+  if(settings?.data)state.config=merge(defaults.config,settings.data);
+  if(Array.isArray(products)&&products.length)state.products=products.map(rowToProduct);
+  saveLocal();applyDesign();renderHeader();renderCategories();renderCatalog();
+}
+async function syncAdminStateToCloud(){
+  if(!supabaseClient||!adminSession)return;
+  const {error:settingsError}=await supabaseClient.from('catalog_settings').upsert({id:1,data:publicConfigForCloud(),updated_at:new Date().toISOString()});
+  if(settingsError)throw settingsError;
+  const rows=state.products.map((p,i)=>productRow(p,i));
+  if(rows.length){
+    const {error}=await supabaseClient.from('products').upsert(rows,{onConflict:'id'});
+    if(error)throw error;
+  }
+  const {data:existing,error:listError}=await supabaseClient.from('products').select('id');
+  if(listError)throw listError;
+  const keep=new Set(rows.map(r=>r.id));
+  const remove=(existing||[]).map(x=>String(x.id)).filter(id=>!keep.has(id));
+  if(remove.length){
+    const {error}=await supabaseClient.from('products').delete().in('id',remove);
+    if(error)throw error;
+  }
+}
+async function initSupabase(){
+  if(!supabaseConfigured()){
+    cloudReady=false;
+    setSupabaseStatus('error','Falta configurar SUPABASE_URL o la Publishable key en index.html.');
+    return;
+  }
+  if(!window.supabase){
+    cloudReady=false;
+    setSupabaseStatus('error','No cargó la librería de Supabase desde CDN.');
+    return;
+  }
+  try{
+    supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{
+      auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+    });
+    const {data,error}=await supabaseClient.auth.getSession();
+    if(error)throw error;
+    adminSession=data?.session||null;
+    cloudReady=true;
+    setSupabaseStatus('ok','Supabase conectado. Autenticación disponible.');
+  }catch(error){
+    cloudReady=false;
+    setSupabaseStatus('error',explainSupabaseError(error));
+    throw error;
+  }
+
+  try{
+    await loadPublicCloudState();
+  }catch(error){
+    console.error('Carga pública Supabase:',error);
+    setSupabaseStatus('warn','Supabase está conectado, pero no se pudieron leer productos/configuración: '+explainSupabaseError(error));
+  }
+
+  supabaseClient.auth.onAuthStateChange((_event,session)=>{adminSession=session||null});
+  try{
+    supabaseClient.channel('catalog-live')
+      .on('postgres_changes',{event:'*',schema:'public',table:'products'},()=>loadPublicCloudState().catch(()=>{}))
+      .on('postgres_changes',{event:'*',schema:'public',table:'catalog_settings'},()=>loadPublicCloudState().catch(()=>{}))
+      .subscribe();
+  }catch(error){
+    console.warn('Realtime no disponible:',error);
+  }
+}
+const money=n=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(Number(n||0));
+const uid=p=>p+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+const esc=s=>String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+function toast(msg,kind='info'){const el=document.createElement('div');el.className='toast';el.innerHTML=(kind==='ok'?UI.check:kind==='error'?UI.close:UI.file)+`<div>${esc(msg)}</div>`;document.getElementById('toastWrap').appendChild(el);setTimeout(()=>el.remove(),3400)}
+
+/* ==============================
+   THEME
+============================== */
+function applyDesign(){const d=state.config.design,r=document.documentElement.style;r.setProperty('--primary',d.primary);r.setProperty('--secondary',d.secondary);r.setProperty('--accent',d.accent);r.setProperty('--text',d.text);r.setProperty('--card',d.card);r.setProperty('--site-bg',d.siteBg);r.setProperty('--product-icon-color',d.iconColor);r.setProperty('--product-icon-size',d.iconSize+'px');r.setProperty('--font',`'${d.font}',sans-serif`);r.setProperty('--radius',d.rounded?'18px':'4px');r.setProperty('--pattern-opacity',d.patternOpacity);document.body.classList.toggle('pattern-on',!!d.pattern);
+ if(d.bgType==='solid')document.body.style.background=d.siteBg;
+ if(d.bgType==='gradient')document.body.style.background=`linear-gradient(${d.gradAngle}deg,${d.grad1},${d.grad2}) fixed`;
+ if(d.bgType==='image'&&d.bgImage){document.body.style.background=`linear-gradient(rgba(255,255,255,${1-d.bgOpacity}),rgba(255,255,255,${1-d.bgOpacity})),url('${d.bgImage}') center/cover fixed`}
+ applyPublicTheme();
+}
+
+
+const THEME_STORE='maniobrasThemeMode';
+let publicThemeMode=localStorage.getItem(THEME_STORE)||'default';
+function applyPublicTheme(){
+  document.body.classList.toggle('dark-mode',publicThemeMode==='dark');
+  const b=document.getElementById('themeBtn');
+  if(b){
+    b.innerHTML=(publicThemeMode==='dark'?UI.sun:UI.moon)+`<span class="theme-switch-label">${publicThemeMode==='dark'?'Predeterminado':'Oscuro'}</span>`;
+    b.setAttribute('aria-label',publicThemeMode==='dark'?'Usar tema predeterminado':'Usar tema oscuro');
+    if(window.innerWidth>=720)b.style.width='auto',b.style.padding='0 12px'; else b.style.width='44px',b.style.padding='0';
+  }
+}
+function togglePublicTheme(){
+  publicThemeMode=publicThemeMode==='dark'?'default':'dark';
+  localStorage.setItem(THEME_STORE,publicThemeMode);
+  applyDesign();
+  applyPublicTheme();
+}
+
+/* ==============================
+   PUBLIC CATALOG
+============================== */
+function productVisual(p){if(p.image)return `<img src="${p.image}" alt="${esc(p.name)}">`;return FOOD[p.icon]||FOOD.plate}
+function renderHeader(){applyPublicTheme();document.getElementById('brandName').textContent=state.config.businessName;document.getElementById('brandTagline').textContent=state.config.tagline;document.getElementById('heroTitle').textContent=`${state.config.businessName}`;const l=document.getElementById('brandLogo');l.innerHTML=state.config.logo?`<img src="${state.config.logo}" alt="Logo">`:FOOD.plate;document.getElementById('adminBtn').innerHTML=UI.settings;document.getElementById('cartBtn').innerHTML=UI.cart+`<span class="badge-count" id="cartCount">0</span>`;document.querySelector('[data-close-drawer]').innerHTML=UI.close;document.querySelectorAll('[data-close-modal]').forEach(b=>b.innerHTML=UI.close);document.getElementById('whatsappFab').innerHTML=UI.whatsapp;const sw=document.getElementById('searchWrap');if(!sw.querySelector('svg'))sw.insertAdjacentHTML('afterbegin',UI.search);document.getElementById('pinSubmit').innerHTML=UI.lock+' Entrar';updateCartCount()}
+function categories(){return ['Todos',...new Set(state.products.filter(p=>p.active).map(p=>p.category).filter(Boolean))]}
+function renderCategories(){document.getElementById('categoryChips').innerHTML=categories().map(c=>`<button class="chip ${c===currentCategory?'active':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}
+function renderCatalog(){const arr=state.products.filter(p=>p.active&&(currentCategory==='Todos'||p.category===currentCategory)&&(`${p.name} ${p.description}`.toLowerCase().includes(searchTerm.toLowerCase())));document.getElementById('catalogGrid').innerHTML=arr.length?arr.map(p=>{const q=state.cart[p.id]||0;return `<article class="product-card"><div class="product-visual">${productVisual(p)}</div><div class="product-body"><div class="product-head"><h3 class="product-name">${esc(p.name)}</h3><div class="price">${money(p.price)}</div></div><p class="desc">${esc(p.description)}</p><div class="meta"><span>${esc(p.category)}</span><span>Stock: ${p.stock}</span></div><div class="qty-row">${p.stock<=0?'<span class="stock-out">Agotado</span>':`<div class="qty-control"><button class="icon-btn" data-dec="${p.id}" aria-label="Quitar cantidad" ${q<=0?'disabled':''}>${UI.minus}</button><span class="qty-value">${q}</span><button class="icon-btn" data-inc="${p.id}" aria-label="Agregar cantidad" ${q>=p.stock?'disabled':''}>${UI.plus}</button></div>`}<button class="btn secondary" data-inc="${p.id}" ${p.stock<=0||q>=p.stock?'disabled':''}>${UI.cart}<span>Agregar</span></button></div></div></article>`}).join(''):'<div class="section-card"><strong>No hay productos para mostrar.</strong></div>';updateCartCount()}
+function changeQty(id,delta){const p=state.products.find(x=>x.id===id);if(!p)return;const next=Math.max(0,Math.min(p.stock,(state.cart[id]||0)+delta));if(next)state.cart[id]=next;else delete state.cart[id];save();renderCatalog();if(document.getElementById('cartDrawer').classList.contains('show'))renderCart()}
+function updateCartCount(){const el=document.getElementById('cartCount');if(el)el.textContent=Object.values(state.cart).reduce((a,b)=>a+b,0)}
+function cartItems(){return Object.entries(state.cart).map(([id,qty])=>({p:state.products.find(x=>x.id===id),qty})).filter(x=>x.p&&x.qty>0)}
+function subtotal(){return cartItems().reduce((s,x)=>s+x.qty*x.p.price,0)}
+function shippingCost(distance){if(checkout.delivery!=='delivery')return 0;const s=state.config.shipping;if(s.freeFrom>0&&subtotal()>=s.freeFrom)return 0;let raw=s.base+distance*s.perKm;raw=raw*(1+s.margin/100);if(s.rounding>0)raw=Math.ceil(raw/s.rounding)*s.rounding;return Math.max(0,raw)}
+function openDrawer(){document.getElementById('overlay').classList.add('show');document.getElementById('cartDrawer').classList.add('show');renderCart();setTimeout(()=>{if(checkout.delivery==='delivery')initClientMap()},120)}
+function closeDrawer(){document.getElementById('overlay').classList.remove('show');document.getElementById('cartDrawer').classList.remove('show')}
+function renderCart(){const items=cartItems(),body=document.getElementById('cartBody'),foot=document.getElementById('cartFoot');if(!items.length){body.innerHTML='<div class="section-card"><strong>Tu carrito está vacío.</strong><p class="muted small">Agrega productos del catálogo para continuar.</p></div>';foot.innerHTML='';return}
+ body.innerHTML=`<div>${items.map(({p,qty})=>`<div class="cart-item"><div><h4>${esc(p.name)}</h4><p>${qty} por ${money(p.price)} = ${money(qty*p.price)}</p><div class="qty-control" style="margin-top:8px"><button class="icon-btn" data-dec="${p.id}">${UI.minus}</button><span class="qty-value">${qty}</span><button class="icon-btn" data-inc="${p.id}" ${qty>=p.stock?'disabled':''}>${UI.plus}</button></div></div><button class="icon-btn" data-remove="${p.id}" aria-label="Eliminar">${UI.trash}</button></div>`).join('')}</div>
+ <div class="form-section"><h3>Tipo de entrega</h3><div class="radio-group"><div class="radio-card"><input type="radio" id="pickup" name="delivery" value="pickup" ${checkout.delivery==='pickup'?'checked':''}><label for="pickup">Recoger en sitio</label></div><div class="radio-card"><input type="radio" id="delivery" name="delivery" value="delivery" ${checkout.delivery==='delivery'?'checked':''} ${!state.config.deliveryEnabled?'disabled':''}><label for="delivery">Domicilio</label></div></div></div>
+ <div id="deliveryBox" class="${checkout.delivery==='delivery'?'':'hidden'}"><div class="field"><label>Dirección de entrega</label><input class="input" id="clientAddress" value="${esc(checkout.address)}" placeholder="Calle, número, colonia, ciudad"></div><button class="btn secondary full" id="geocodeClient">${UI.pin}<span>Ubicar en mapa</span></button><div class="small muted" style="margin:8px 0">Puedes mover el marcador para ajustar tu ubicación.</div><div id="clientMap" class="map"></div><div class="notice" id="distanceInfo">${checkout.distance>0?`Distancia calculada: ${checkout.distance.toFixed(2)} km. Envío: ${money(checkout.shipping)}`:'Ubica tu dirección para calcular el envío.'}</div></div>
+ <div class="form-section"><h3>Datos del cliente</h3><div class="field"><label>Nombre</label><input class="input" id="customerName" value="${esc(checkout.name)}"></div><div class="field"><label>Teléfono a 10 dígitos</label><input class="input" id="customerPhone" inputmode="numeric" maxlength="10" value="${esc(checkout.phone)}"></div><div class="field"><label>Notas del pedido</label><textarea class="textarea" id="customerNotes">${esc(checkout.notes)}</textarea></div></div>
+ <div class="form-section"><h3>Método de pago</h3>${state.config.payments.map(x=>`<div class="payment-item"><div class="row"><input type="radio" name="payment" value="${x.id}" ${checkout.paymentId===x.id?'checked':''}><strong>${esc(x.title)}</strong><button class="icon-btn" data-copy="${esc(x.data)}" data-copy-id="${x.id}">${UI.copy}</button></div><div class="payment-data">${esc(x.data)}</div><div class="copy-note" id="copy_${x.id}">${UI.check}<span>Copiado</span></div></div>`).join('')}</div>
+ <div class="form-section"><h3>Comprobante</h3><label class="btn secondary full" for="proofFile">${UI.attach}<span>Adjuntar imagen o PDF</span></label><input class="hidden" id="proofFile" type="file" accept="image/png,image/jpeg,application/pdf"><div class="preview-file ${checkout.proofFile?'show':''}" id="proofPreview">${proofPreviewHtml()}</div><div class="notice" style="margin-top:10px">Al abrir WhatsApp, adjunta tu comprobante en el chat.</div></div>`;
+ checkout.shipping=shippingCost(checkout.distance);
+ foot.innerHTML=`<div class="total-line"><span>Subtotal</span><strong>${money(subtotal())}</strong></div><div class="total-line"><span>Envío</span><strong>${money(checkout.shipping)}</strong></div><div class="total-line grand"><span>Total</span><span>${money(subtotal()+checkout.shipping)}</span></div><button class="btn full" id="reviewOrder">${UI.arrowRight}<span>Revisar pedido</span></button>`;
+ bindCartFields();
+}
+function proofPreviewHtml(){if(!checkout.proofFile)return '';if(checkout.proofFile.type.startsWith('image/'))return `<img src="${checkout.proofUrl}" alt="Comprobante"><div><strong>${esc(checkout.proofName)}</strong><div class="small muted">Imagen adjunta</div></div>`;return `<div class="file-generic">${UI.file}</div><div><strong>${esc(checkout.proofName)}</strong><div class="small muted">Documento PDF adjunto</div></div>`}
+function bindCartFields(){document.querySelectorAll('input[name=delivery]').forEach(r=>r.onchange=e=>{checkout.delivery=e.target.value;checkout.shipping=shippingCost(checkout.distance);renderCart();setTimeout(()=>checkout.delivery==='delivery'&&initClientMap(),100)});const f=id=>document.getElementById(id);if(f('customerName'))f('customerName').oninput=e=>checkout.name=e.target.value;if(f('customerPhone'))f('customerPhone').oninput=e=>checkout.phone=e.target.value.replace(/\D/g,'').slice(0,10);if(f('customerNotes'))f('customerNotes').oninput=e=>checkout.notes=e.target.value;if(f('clientAddress'))f('clientAddress').oninput=e=>checkout.address=e.target.value;document.querySelectorAll('input[name=payment]').forEach(r=>r.onchange=e=>checkout.paymentId=e.target.value);if(f('proofFile'))f('proofFile').onchange=handleProof;if(f('geocodeClient'))f('geocodeClient').onclick=()=>geocodeAddress(checkout.address,'client');if(f('reviewOrder'))f('reviewOrder').onclick=reviewOrder}
+function handleProof(e){const file=e.target.files[0];if(!file)return;checkout.proofFile=file;checkout.proofName=file.name;if(checkout.proofUrl)URL.revokeObjectURL(checkout.proofUrl);checkout.proofUrl=URL.createObjectURL(file);const p=document.getElementById('proofPreview');p.classList.add('show');p.innerHTML=proofPreviewHtml()}
+function validateCheckout(){if(!cartItems().length)return 'El carrito está vacío.';if(!checkout.name.trim())return 'Escribe tu nombre.';if(!/^\d{10}$/.test(checkout.phone))return 'El teléfono debe tener 10 dígitos.';if(!checkout.paymentId)return 'Selecciona un método de pago.';if(!checkout.proofFile)return 'Adjunta tu comprobante de pago.';if(checkout.delivery==='delivery'){if(!state.config.deliveryEnabled)return 'El envío a domicilio no está disponible.';if(!checkout.address.trim())return 'Escribe tu dirección de entrega.';if(checkout.lat==null||checkout.lng==null||checkout.distance<=0)return 'Ubica y confirma tu dirección en el mapa.'}return ''}
+function reviewOrder(){const err=validateCheckout();if(err){toast(err,'error');return}checkout.shipping=shippingCost(checkout.distance);closeDrawer();renderSummary();openModal('summaryModal')}
+function renderSummary(){const items=cartItems(),pay=state.config.payments.find(x=>x.id===checkout.paymentId),total=subtotal()+checkout.shipping;document.getElementById('summaryBody').innerHTML=`<div class="table-wrap"><table class="summary-table"><thead><tr><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Total por producto</th></tr></thead><tbody>${items.map(x=>`<tr><td>${esc(x.p.name)}</td><td>${x.qty}</td><td>${money(x.p.price)}</td><td>${money(x.qty*x.p.price)}</td></tr>`).join('')}</tbody></table></div><div class="total-box"><div class="total-line"><span>Subtotal general</span><strong>${money(subtotal())}</strong></div><div class="total-line"><span>Envío ${checkout.delivery==='delivery'?`(${checkout.distance.toFixed(2)} km)`:''}</span><strong>${money(checkout.shipping)}</strong></div><div class="total-line grand"><span>TOTAL GENERAL</span><span>${money(total)}</span></div></div><hr><div class="stack small"><div><strong>Cliente:</strong> ${esc(checkout.name)} · ${esc(checkout.phone)}</div><div><strong>Entrega:</strong> ${checkout.delivery==='pickup'?'Recoger en sitio':`Domicilio · ${esc(checkout.address)}`}</div><div><strong>Método de pago:</strong> ${esc(pay?.title||'')}</div><div><strong>Notas:</strong> ${esc(checkout.notes||'Sin notas')}</div></div><div class="toolbar" style="margin-top:16px"><button class="btn ghost" id="editOrder">${UI.arrowLeft}<span>Editar pedido</span></button><button class="btn" id="confirmOrder">${UI.file}<span>Confirmar y generar PDF</span></button></div>`;document.getElementById('editOrder').onclick=()=>{closeModal('summaryModal');openDrawer()};document.getElementById('confirmOrder').onclick=confirmOrder}
+
+/* ==============================
+   MAP, GEOCODING & ROUTING
+============================== */
+
+function mapSettings(){
+  state.config.map=state.config.map||{provider:'carto',apiKey:'',style:'voyager',attribution:'OpenStreetMap contributors, CARTO'};
+  if(!state.config.map.style)state.config.map.style='voyager';
+  return state.config.map;
+}
+function cartoTileUrl(){
+  const m=mapSettings();
+  const key=(m.apiKey||'').trim();
+  const style=['voyager','light_all','dark_all'].includes(m.style)?m.style:'voyager';
+  if(!key)return '';
+  return `https://basemaps.cartocdn.com/rastertiles/${style}/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(key)}`;
+}
+function mapConfigured(){return !!cartoTileUrl()}
+function showMapConfigNeeded(containerId){
+  const el=document.getElementById(containerId);
+  if(!el)return;
+  el.innerHTML=`<div class="empty-state" style="height:100%;min-height:220px;display:grid;place-items:center;padding:24px;text-align:center"><div>${UI.map}<strong style="display:block;margin:8px 0">Falta configurar CARTO</strong><span class="small muted">En Administración, Negocio, CARTO pega tu API key para activar los mapas.</span></div></div>`;
+}
+function addConfiguredTileLayer(map,containerId){
+  const url=cartoTileUrl();
+  if(!url){showMapConfigNeeded(containerId);return false}
+  try{
+    L.tileLayer(url,{
+      maxZoom:20,
+      attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, &copy; <a href="https://carto.com/attribution/">CARTO</a>'
+    }).addTo(map);
+    return true;
+  }catch(e){
+    showMapConfigNeeded(containerId);
+    return false;
+  }
+}
+
+function initClientMap(){if(!document.getElementById('clientMap')||typeof L==='undefined')return;const center=checkout.lat!=null?[checkout.lat,checkout.lng]:[state.config.origin.lat,state.config.origin.lng];if(clientMap){clientMap.remove();clientMap=null}clientMap=L.map('clientMap').setView(center,13);if(!addConfiguredTileLayer(clientMap,'clientMap')){clientMap.remove();clientMap=null;return;}customerMarker=L.marker(center,{draggable:true}).addTo(clientMap);customerMarker.on('dragend',async e=>{const ll=e.target.getLatLng();checkout.lat=ll.lat;checkout.lng=ll.lng;await computeClientRoute()});clientMap.on('click',e=>{customerMarker.setLatLng(e.latlng);checkout.lat=e.latlng.lat;checkout.lng=e.latlng.lng;computeClientRoute()})}
+async function geocodeAddress(address,target){if(!address.trim()){toast('Escribe una dirección.','error');return}try{const url=`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`;const r=await fetch(url,{headers:{'Accept':'application/json'}});if(!r.ok)throw new Error();const d=await r.json();if(!d.length)throw new Error();const lat=Number(d[0].lat),lng=Number(d[0].lon);if(target==='client'){checkout.lat=lat;checkout.lng=lng;checkout.address=d[0].display_name;document.getElementById('clientAddress').value=checkout.address;if(customerMarker)customerMarker.setLatLng([lat,lng]);if(clientMap)clientMap.setView([lat,lng],15);await computeClientRoute()}else if(target==='origin'){state.config.origin={address:d[0].display_name,lat,lng};save();renderAdminPane('business');toast('Origen actualizado.','ok')}else if(target==='trip'){document.getElementById('tripDestination').value=d[0].display_name;setTripDestination(lat,lng)}}catch(e){toast('No se pudo geocodificar la dirección. Puedes marcar el punto manualmente en el mapa.','error')}}
+function haversine(a,b,c,d){const R=6371,toRad=x=>x*Math.PI/180,da=toRad(c-a),db=toRad(d-b),q=Math.sin(da/2)**2+Math.cos(toRad(a))*Math.cos(toRad(c))*Math.sin(db/2)**2;return 2*R*Math.atan2(Math.sqrt(q),Math.sqrt(1-q))}
+async function routeDistance(aLat,aLng,bLat,bLng){try{const u=`https://router.project-osrm.org/route/v1/driving/${aLng},${aLat};${bLng},${bLat}?overview=full&geometries=geojson`;const r=await fetch(u);if(!r.ok)throw new Error();const d=await r.json();if(!d.routes?.length)throw new Error();return {km:d.routes[0].distance/1000,geo:d.routes[0].geometry}}catch(e){return {km:haversine(aLat,aLng,bLat,bLng)*1.3,geo:null,fallback:true}}}
+async function computeClientRoute(){if(checkout.lat==null)return;const o=state.config.origin,res=await routeDistance(o.lat,o.lng,checkout.lat,checkout.lng);checkout.distance=res.km;checkout.shipping=shippingCost(res.km);const info=document.getElementById('distanceInfo');if(info)info.textContent=`Distancia calculada: ${res.km.toFixed(2)} km. Envío: ${money(checkout.shipping)}${res.fallback?' (estimación de respaldo)':''}`;const foot=document.getElementById('cartFoot');if(foot){const lines=foot.querySelectorAll('.total-line strong,.total-line.grand span:last-child');if(lines.length>=3){lines[1].textContent=money(checkout.shipping);lines[2].textContent=money(subtotal()+checkout.shipping)}}}
+
+/* ==============================
+   PDF, ORDER & WHATSAPP
+============================== */
+function nextFolio(){const d=new Date(),stamp=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;return `${stamp}-${String(state.folioSeq).padStart(4,'0')}`}
+async function buildPdf(order){const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:'mm',format:'a4'});let titleX=14;if(state.config.logo&&/^data:image\/(png|jpe?g|webp);/i.test(state.config.logo)){try{const fmt=(state.config.logo.match(/^data:image\/(png|jpe?g|webp);/i)||[])[1];doc.addImage(state.config.logo,fmt&&fmt.toLowerCase().startsWith('jp')?'JPEG':fmt.toUpperCase(),14,9,16,16);titleX=34}catch(e){}}doc.setFont('helvetica','bold');doc.setFontSize(18);doc.text(state.config.businessName,titleX,18);doc.setFontSize(10);doc.setFont('helvetica','normal');doc.text(`Folio: ${order.folio}`,14,25);doc.text(`Fecha: ${order.dateText}`,14,31);doc.text(`Cliente: ${order.customer.name}`,14,39);doc.text(`Teléfono: ${order.customer.phone}`,14,45);doc.text(`Entrega: ${order.delivery.label}`,14,51);if(order.delivery.address)doc.text(`Dirección: ${order.delivery.address}`,14,57,{maxWidth:180});const y=order.delivery.address?66:58;doc.autoTable({startY:y,head:[['Producto','Cantidad','Precio unitario','Total']],body:order.items.map(i=>[i.name,String(i.qty),money(i.price),money(i.total)]),styles:{fontSize:9},headStyles:{fillColor:[60,60,60]},theme:'grid'});let yy=doc.lastAutoTable.finalY+8;doc.setFont('helvetica','normal');doc.text(`Subtotal: ${money(order.subtotal)}`,140,yy);yy+=6;doc.text(`Envío: ${money(order.shipping)}`,140,yy);yy+=7;doc.setFont('helvetica','bold');doc.text(`TOTAL GENERAL: ${money(order.total)}`,140,yy);yy+=10;doc.setFont('helvetica','normal');doc.text(`Método de pago elegido: ${order.paymentTitle}`,14,yy,{maxWidth:180});yy+=8;doc.text('Métodos de pago disponibles:',14,yy);yy+=6;state.config.payments.forEach(p=>{doc.text(`${p.title}: ${p.data}`,18,yy,{maxWidth:175});yy+=6});return doc.output('blob')}
+function whatsappText(order){return [`PEDIDO #${order.folio}`,`CLIENTE: ${order.customer.name} y ${order.customer.phone}`,'DETALLE:',...order.items.map(i=>`${i.qty} x ${i.name} - ${money(i.price)} c/u = ${money(i.total)}`),`ENTREGA: ${order.delivery.label}${order.delivery.address?' - '+order.delivery.address:''}${order.delivery.km?` - ${order.delivery.km.toFixed(2)} km`:''}`,`SUBTOTAL: ${money(order.subtotal)}`,`ENVIO: ${money(order.shipping)}`,`TOTAL: ${money(order.total)}`,`METODO DE PAGO: ${order.paymentTitle}`,'Adjunto mi comprobante a continuación.'].join('\n')}
+
+function renderOrdersAdmin(c,skipFetch=false){
+  c.innerHTML=`<div class="section-card"><h3>Historial de pedidos</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>Orden</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pago</th><th>Entrega</th><th>Acciones</th></tr></thead><tbody>${state.orders.length?state.orders.map(o=>`<tr><td>${esc(o.publicId||o.folio)}</td><td>${esc(new Date(o.date).toLocaleString('es-MX'))}</td><td>${esc(o.customer.name)}</td><td>${money(o.total)}</td><td>${paymentBadge(o.paymentStatus||'WAITING_PAYMENT')}</td><td><span class="status-badge status-${o.status}">${o.status==='pendiente'?UI.pending:o.status==='pagado'?UI.paid:UI.delivered}<span>${o.status}</span></span></td><td><div class="row"><select class="select" data-order-status="${o.id}"><option value="pendiente" ${o.status==='pendiente'?'selected':''}>Pendiente</option><option value="pagado" ${o.status==='pagado'?'selected':''}>Pagado</option><option value="entregado" ${o.status==='entregado'?'selected':''}>Entregado</option></select><button class="icon-btn" data-reprint="${o.id}">${UI.download}</button></div></td></tr>`).join(''):`<tr><td colspan="7">Todavía no hay pedidos.</td></tr>`}</tbody></table></div></div><div class="section-card"><h3>Respaldo</h3><div class="toolbar"><button class="btn" id="exportJson">${UI.download}<span>Exportar JSON</span></button><label class="btn secondary" for="importJson">${UI.upload}<span>Importar JSON</span></label><input class="hidden" id="importJson" type="file" accept="application/json"></div></div>`;
+  document.querySelectorAll('[data-order-status]').forEach(s=>s.onchange=async e=>{const o=state.orders.find(x=>x.id===e.target.dataset.orderStatus);if(!o)return;o.status=e.target.value;saveLocal();if(supabaseClient&&adminSession){const {error}=await supabaseClient.from('orders').update({status:o.status}).eq('id',o.id);if(error)toast('No se pudo actualizar el estado.','error')}renderOrdersAdmin(document.getElementById('adminContent'),true)});
+  document.querySelectorAll('[data-reprint]').forEach(b=>b.onclick=()=>reprintOrder(b.dataset.reprint));
+  document.getElementById('exportJson').onclick=exportJson;document.getElementById('importJson').onchange=importJson;
+  if(!skipFetch&&supabaseClient&&adminSession)fetchCloudOrders().then(()=>{if(activeAdmin==='orders')renderOrdersAdmin(document.getElementById('adminContent'),true)}).catch(e=>toast(e.message||'No se pudo cargar el historial de Supabase.','error'));
+}
+
+async function confirmOrder(){const items=cartItems(),folio=nextFolio(),pay=state.config.payments.find(x=>x.id===checkout.paymentId),now=new Date();const order={id:uid('o'),folio,date:now.toISOString(),dateText:now.toLocaleString('es-MX'),customer:{name:checkout.name,phone:checkout.phone,notes:checkout.notes},items:items.map(x=>({id:x.p.id,name:x.p.name,qty:x.qty,price:x.p.price,total:x.qty*x.p.price})),subtotal:subtotal(),shipping:checkout.shipping,total:subtotal()+checkout.shipping,paymentId:checkout.paymentId,paymentTitle:pay?.title||'',delivery:{type:checkout.delivery,label:checkout.delivery==='pickup'?'Recoger en sitio':'Domicilio',address:checkout.delivery==='delivery'?checkout.address:'',km:checkout.delivery==='delivery'?checkout.distance:0},status:'pendiente'};lastPdfBlob=await buildPdf(order);lastPdfName=`pedido-${folio}.pdf`;lastOrderId=order.id;state.orders.unshift(order);state.folioSeq++;items.forEach(x=>{x.p.stock=Math.max(0,x.p.stock-x.qty)});state.cart={};save();renderCatalog();updateCartCount();renderPostConfirm(order)}
+function renderPostConfirm(order){document.getElementById('summaryBody').innerHTML=`<div class="section-card"><div class="row">${UI.check}<div><strong>Pedido generado</strong><div class="small muted">Folio ${order.folio}</div></div></div></div><div class="total-line grand"><span>TOTAL GENERAL</span><span>${money(order.total)}</span></div><div class="stack" style="margin-top:16px"><button class="btn full" id="downloadPdf">${UI.download}<span>Descargar PDF</span></button>${navigator.canShare?`<button class="btn secondary full" id="shareFiles">${UI.attach}<span>Compartir PDF + comprobante</span></button>`:''}<button class="btn success full" id="payWhatsapp">${UI.whatsapp}<span>PAGAR</span></button></div><div class="notice" style="margin-top:12px">Tu comprobante se registra en el sistema cuando la conexión está disponible. WhatsApp se mantiene como canal de contacto del negocio.</div>`;document.getElementById('downloadPdf').onclick=downloadLastPdf;document.getElementById('payWhatsapp').onclick=()=>{window.open(`https://wa.me/${state.config.whatsapp}?text=${encodeURIComponent(whatsappText(order))}`,'_blank');resetCheckout();closeModal('summaryModal')};if(document.getElementById('shareFiles'))document.getElementById('shareFiles').onclick=()=>shareFiles(order)}
+function downloadLastPdf(){if(!lastPdfBlob)return;const a=document.createElement('a');a.href=URL.createObjectURL(lastPdfBlob);a.download=lastPdfName;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+async function shareFiles(order){if(!lastPdfBlob||!checkout.proofFile)return;const pdfFile=new File([lastPdfBlob],lastPdfName,{type:'application/pdf'}),files=[pdfFile,checkout.proofFile];try{if(navigator.canShare?.({files}))await navigator.share({title:`Pedido ${order.folio}`,text:'Cuenta del pedido y comprobante',files});else toast('Tu navegador no permite compartir estos archivos juntos.','error')}catch(e){if(e.name!=='AbortError')toast('No se pudieron compartir los archivos.','error')}}
+function resetCheckout(){checkout={delivery:'delivery',address:'',lat:null,lng:null,distance:0,shipping:0,name:'',phone:'',notes:'',paymentId:'',proofFile:null,proofUrl:'',proofName:''}}
+async function reprintOrder(id){const order=state.orders.find(o=>o.id===id);if(!order)return;lastPdfBlob=await buildPdf(order);lastPdfName=`pedido-${order.folio}.pdf`;downloadLastPdf()}
+
+/* ==============================
+   MODALS
+============================== */
+function openModal(id){document.getElementById('overlay').classList.add('show');document.getElementById(id).classList.add('show')}
+function closeModal(id){document.getElementById(id).classList.remove('show');if(!document.querySelector('.modal.show')&&!document.getElementById('cartDrawer').classList.contains('show'))document.getElementById('overlay').classList.remove('show')}
+
+/* ==============================
+   ADMIN PANEL
+============================== */
+const adminTabs=[
+['dashboard','Dashboard',UI.dashboard],
+['products','Productos',UI.products],
+['design','Personalización',UI.palette],
+['business','Negocio',UI.business],
+['trip','Calculadora de viajes',UI.calc],
+['orders','Pedidos',UI.orders],
+['review','Revisión de pagos',UI.review],
+['receipts','Comprobantes',UI.receipt],
+['audit','Auditoría',UI.audit],
+['integrations','Integraciones',UI.telegram]
+];
+let activeAdmin='dashboard',editingProductId=null;
+async function openAdmin(){
+  if(adminSession&&supabaseClient){renderAdmin();openModal('adminModal');return}
+  const email=document.getElementById('adminEmailInput');
+  const pass=document.getElementById('adminPasswordInput');
+  if(email)email.value=localStorage.getItem('maniobrasAdminEmail')||'';
+  if(pass)pass.value='';
+  openModal('pinModal');
+  setTimeout(()=>email?.focus(),80);
+}
+async function checkPin(){
+  if(!supabaseConfigured()){toast('Configura primero la URL y la clave pública de Supabase.','error');return}if(!supabaseClient){try{await initSupabase()}catch(e){toast(explainSupabaseError(e),'error');return}}
+  const email=document.getElementById('adminEmailInput').value.trim().toLowerCase();
+  const password=document.getElementById('adminPasswordInput').value;
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Escribe un correo válido.','error');return}
+  if(password.length<6){toast('La contraseña debe tener al menos 6 caracteres.','error');return}
+  const btn=document.getElementById('pinSubmit');btn.disabled=true;
+  try{
+    const {data,error}=await supabaseClient.auth.signInWithPassword({email,password});
+    if(error)throw error;
+    const {data:isAdmin,error:adminError}=await supabaseClient.rpc('is_catalog_admin');
+    if(adminError){throw new Error('No se pudo verificar el rol administrador: '+explainSupabaseError(adminError))}if(isAdmin!==true){
+      await supabaseClient.auth.signOut();
+      throw new Error('Esta cuenta no tiene permisos de administrador.');
+    }
+    adminSession=data.session;
+    localStorage.setItem('maniobrasAdminEmail',email);
+    closeModal('pinModal');renderAdmin();openModal('adminModal');toast('Acceso administrativo iniciado.','ok');
+  }catch(e){toast(e?.message||'No se pudo iniciar sesión.','error')}
+  finally{btn.disabled=false}
+}
+function renderAdmin(){document.getElementById('adminTabs').innerHTML=adminTabs.map(([id,label,ico])=>`<button class="tab-btn ${activeAdmin===id?'active':''}" data-tab="${id}">${ico}<span>${label}</span></button>`).join('');renderAdminPane(activeAdmin)}
+function renderAdminPane(id){
+  activeAdmin=id;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));
+  const c=document.getElementById('adminContent');
+  if(id==='dashboard')renderAdminDashboard(c);
+  if(id==='products')renderProductsAdmin(c);
+  if(id==='design')renderDesignAdmin(c);
+  if(id==='business')renderBusinessAdmin(c);
+  if(id==='trip')renderTripAdmin(c);
+  if(id==='orders')renderOrdersAdmin(c);
+  if(id==='review')renderPaymentReviewAdmin(c);
+  if(id==='receipts')renderReceiptsAdmin(c);
+  if(id==='audit')renderAuditAdmin(c);
+  if(id==='integrations')renderIntegrationsAdmin(c);
+}
+function renderProductsAdmin(c){c.innerHTML=`<div class="toolbar"><button class="btn" id="newProduct">${UI.plus}<span>Nuevo producto</span></button></div><div class="section-card" id="productFormWrap" style="display:${editingProductId?'block':'none'}">${productFormHtml()}</div><div class="section-card"><h3>Productos</h3>${state.products.map(p=>`<div class="product-admin"><div class="product-visual" style="width:54px;height:54px">${productVisual(p)}</div><div><strong>${esc(p.name)}</strong><div class="small muted">${esc(p.category)} · ${money(p.price)} · Stock ${p.stock} · ${p.active?'Activo':'Inactivo'}</div><div class="row" style="margin-top:6px"><button class="icon-btn" data-stock-dec="${p.id}">${UI.minus}</button><button class="icon-btn" data-stock-inc="${p.id}">${UI.plus}</button></div></div><div class="row"><button class="icon-btn" data-edit-product="${p.id}">${UI.edit}</button><button class="icon-btn" data-delete-product="${p.id}">${UI.trash}</button></div></div>`).join('')}</div>`;bindProductAdmin()}
+function productFormHtml(){const p=state.products.find(x=>x.id===editingProductId)||{name:'',description:'',category:'',price:0,stock:0,icon:'plate',image:'',active:true};return `<h3>${editingProductId?'Editar producto':'Nuevo producto'}</h3><div class="admin-grid two"><div><div class="field"><label>Nombre</label><input class="input" id="apName" value="${esc(p.name)}"></div><div class="field"><label>Descripción</label><textarea class="textarea" id="apDesc">${esc(p.description)}</textarea></div><div class="field"><label>Categoría</label><input class="input" id="apCategory" value="${esc(p.category)}"></div><div class="field"><label>Precio</label><input class="input" id="apPrice" type="number" min="0" step="0.01" value="${p.price}"></div><div class="field"><label>Stock</label><input class="input" id="apStock" type="number" min="0" step="1" value="${p.stock}"></div><label class="row"><input type="checkbox" id="apActive" ${p.active?'checked':''}><span>Producto activo</span></label></div><div><div class="field"><label>Biblioteca de iconos SVG</label><div class="icon-pack-tabs">${['Todos',...Object.keys(FOOD_PACKS)].map(pack=>`<button class="icon-pack-btn ${activeFoodPack===pack?'active':''}" data-icon-pack="${pack}" type="button">${pack}</button>`).join('')}</div><div class="icon-picker" id="iconPicker">${foodIconKeys().map(k=>`<button class="icon-option ${p.icon===k&&!p.image?'selected':''}" data-icon="${k}" title="${k}" type="button">${FOOD[k]}</button>`).join('')}</div></div><div class="field"><label>Imagen propia PNG, JPG o SVG</label><label class="btn secondary" for="apImage">${UI.upload}<span>Subir imagen</span></label><input class="hidden" type="file" id="apImage" accept="image/png,image/jpeg,image/svg+xml"><input type="hidden" id="apImageData" value="${p.image||''}"></div></div></div><div class="toolbar"><button class="btn" id="saveProduct">${UI.save}<span>Guardar</span></button><button class="btn ghost" id="cancelProduct">${UI.close}<span>Cancelar</span></button></div>`}
+function bindProductAdmin(){
+document.querySelectorAll('[data-icon-pack]').forEach(b=>b.onclick=()=>{activeFoodPack=b.dataset.iconPack;renderProductsAdmin(document.getElementById('adminContent'));if(editingProductId!==null)document.getElementById('productFormWrap').style.display='block'});
+const n=document.getElementById('newProduct');if(n)n.onclick=()=>{editingProductId='';renderProductsAdmin(document.getElementById('adminContent'));document.getElementById('productFormWrap').style.display='block'};document.querySelectorAll('[data-edit-product]').forEach(b=>b.onclick=()=>{editingProductId=b.dataset.editProduct;renderProductsAdmin(document.getElementById('adminContent'))});document.querySelectorAll('[data-delete-product]').forEach(b=>b.onclick=()=>{if(confirm('¿Eliminar este producto?')){state.products=state.products.filter(p=>p.id!==b.dataset.deleteProduct);delete state.cart[b.dataset.deleteProduct];save();renderProductsAdmin(document.getElementById('adminContent'));renderCatalog()}});document.querySelectorAll('[data-stock-inc]').forEach(b=>b.onclick=()=>quickStock(b.dataset.stockInc,1));document.querySelectorAll('[data-stock-dec]').forEach(b=>b.onclick=()=>quickStock(b.dataset.stockDec,-1));document.querySelectorAll('.icon-option').forEach(b=>b.onclick=()=>{document.querySelectorAll('.icon-option').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');document.getElementById('apImageData').value='';b.dataset.chosen='1'});const image=document.getElementById('apImage');if(image)image.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{document.getElementById('apImageData').value=r.result;document.querySelectorAll('.icon-option').forEach(x=>x.classList.remove('selected'))};r.readAsDataURL(f)};const sp=document.getElementById('saveProduct');if(sp)sp.onclick=saveProductForm;const cp=document.getElementById('cancelProduct');if(cp)cp.onclick=()=>{editingProductId=null;renderProductsAdmin(document.getElementById('adminContent'))}}
+function quickStock(id,d){const p=state.products.find(x=>x.id===id);if(!p)return;p.stock=Math.max(0,p.stock+d);save();renderProductsAdmin(document.getElementById('adminContent'));renderCatalog()}
+function saveProductForm(){const selected=document.querySelector('.icon-option.selected');const obj={id:editingProductId||uid('p'),name:document.getElementById('apName').value.trim(),description:document.getElementById('apDesc').value.trim(),category:document.getElementById('apCategory').value.trim(),price:Number(document.getElementById('apPrice').value),stock:Math.max(0,Math.floor(Number(document.getElementById('apStock').value))),icon:selected?.dataset.icon||'plate',image:document.getElementById('apImageData').value,active:document.getElementById('apActive').checked};if(!obj.name||!obj.category||obj.price<0){toast('Completa nombre, categoría y precio válido.','error');return}const i=state.products.findIndex(x=>x.id===obj.id);if(i>=0)state.products[i]=obj;else state.products.push(obj);editingProductId=null;save();renderProductsAdmin(document.getElementById('adminContent'));renderCategories();renderCatalog();toast('Producto guardado.','ok')}
+const palettes=[['Clásica rojo','#c62828','#fff3f3','#ffb300','#232323','#ffffff'],['Verde fresco','#197a4b','#effbf3','#f2b134','#1f2a24','#ffffff'],['Naranja cálido','#d65f16','#fff4e8','#9d4edd','#2c231d','#ffffff'],['Oscuro elegante','#27272a','#3f3f46','#d4af37','#f4f4f5','#18181b'],['Azul marino','#16324f','#edf4fb','#f0a202','#18212a','#ffffff'],['Rosa pastel','#b85c7f','#fff0f6','#7b61a8','#3a2630','#ffffff']];
+function renderDesignAdmin(c){const d=state.config.design;c.innerHTML=`<div class="section-card"><h3>Paletas predefinidas</h3><div class="palette-grid">${palettes.map((p,i)=>`<button class="palette-card" data-palette="${i}"><strong>${p[0]}</strong><div class="swatches">${p.slice(1).map(x=>`<span style="background:${x}"></span>`).join('')}</div></button>`).join('')}</div></div><div class="section-card"><h3>Colores personalizados</h3><div class="color-grid">${[['Primario','primary'],['Secundario','secondary'],['Acento','accent'],['Texto','text'],['Fondo tarjetas','card'],['Fondo sitio','siteBg'],['Iconos producto','iconColor']].map(([lab,key])=>`<label class="color-input"><input type="color" data-design="${key}" value="${d[key]}"><span>${lab}</span></label>`).join('')}</div></div><div class="section-card"><h3>Fondo del sitio</h3><div class="field"><label>Tipo</label><select class="select" id="bgType"><option value="solid" ${d.bgType==='solid'?'selected':''}>Color sólido</option><option value="gradient" ${d.bgType==='gradient'?'selected':''}>Degradado</option><option value="image" ${d.bgType==='image'?'selected':''}>Imagen</option></select></div><div class="admin-grid two"><div class="field"><label>Color 1</label><input type="color" class="input" id="grad1" value="${d.grad1}"></div><div class="field"><label>Color 2</label><input type="color" class="input" id="grad2" value="${d.grad2}"></div></div><div class="field"><label>Ángulo del degradado</label><input class="input" id="gradAngle" type="range" min="0" max="360" value="${d.gradAngle}"></div><div class="field"><label>Imagen de fondo</label><label class="btn secondary" for="bgImage">${UI.upload}<span>Subir imagen</span></label><input class="hidden" id="bgImage" type="file" accept="image/*"></div><div class="field"><label>Opacidad de imagen</label><input class="input" id="bgOpacity" type="range" min="0" max="1" step="0.05" value="${d.bgOpacity}"></div><label class="row"><input type="checkbox" id="pattern" ${d.pattern?'checked':''}><span>Patrón de fondo</span></label><div class="field"><label>Opacidad del patrón</label><input class="input" id="patternOpacity" type="range" min="0" max="0.2" step="0.005" value="${d.patternOpacity}"></div></div><div class="section-card"><h3>Tipografía e iconos</h3><div class="admin-grid two"><div class="field"><label>Tipografía</label><select class="select" id="fontSelect">${['Inter','Nunito','Poppins','Roboto'].map(f=>`<option ${d.font===f?'selected':''}>${f}</option>`).join('')}</select></div><div class="field"><label>Tamaño de iconos de producto</label><input class="input" id="iconSize" type="range" min="54" max="110" value="${d.iconSize}"></div></div><label class="row"><input type="checkbox" id="rounded" ${d.rounded?'checked':''}><span>Bordes redondeados</span></label></div><div class="section-card"><h3>Vista previa</h3><div class="product-card"><div class="product-visual">${FOOD.burger}</div><div class="product-body"><div class="product-head"><h3 class="product-name">Producto de muestra</h3><div class="price">${money(99)}</div></div><p class="desc">La vista previa cambia con tu diseño.</p><button class="btn">${UI.cart}<span>Agregar</span></button></div></div></div><div class="toolbar"><button class="btn ghost" id="resetDesign">${UI.refresh}<span>Restablecer diseño</span></button></div>`;bindDesignAdmin()}
+function bindDesignAdmin(){document.querySelectorAll('[data-palette]').forEach(b=>b.onclick=()=>{const p=palettes[Number(b.dataset.palette)],d=state.config.design;[d.primary,d.secondary,d.accent,d.text,d.card]=p.slice(1);d.iconColor=d.primary;save();applyDesign();renderDesignAdmin(document.getElementById('adminContent'))});document.querySelectorAll('[data-design]').forEach(i=>i.oninput=e=>{state.config.design[e.target.dataset.design]=e.target.value;save();applyDesign()});const ids=['bgType','grad1','grad2','gradAngle','bgOpacity','pattern','patternOpacity','fontSelect','iconSize','rounded'];ids.forEach(id=>{const el=document.getElementById(id);if(!el)return;const evt=el.type==='range'||el.type==='color'?'input':'change';el.addEventListener(evt,()=>{const d=state.config.design;if(id==='pattern'||id==='rounded')d[id]=el.checked;else if(id==='fontSelect')d.font=el.value;else if(id==='iconSize')d.iconSize=Number(el.value);else if(id==='gradAngle')d.gradAngle=Number(el.value);else if(id==='bgOpacity'||id==='patternOpacity')d[id]=Number(el.value);else d[id]=el.value;save();applyDesign()})});document.getElementById('bgImage').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{state.config.design.bgImage=r.result;state.config.design.bgType='image';save();applyDesign();renderDesignAdmin(document.getElementById('adminContent'))};r.readAsDataURL(f)};document.getElementById('resetDesign').onclick=()=>{state.config.design=deepClone(defaults.config.design);save();applyDesign();renderDesignAdmin(document.getElementById('adminContent'));renderHeader()}}
+function renderBusinessAdmin(c){const cfg=state.config;c.innerHTML=`<div class="section-card"><h3>Identidad</h3><div class="admin-grid two"><div class="field"><label>Nombre del negocio</label><input class="input" id="bizName" value="${esc(cfg.businessName)}"></div><div class="field"><label>Eslogan</label><input class="input" id="bizTagline" value="${esc(cfg.tagline)}"></div></div><div class="field"><label>Logo</label><label class="btn secondary" for="bizLogo">${UI.upload}<span>Subir logo</span></label><input class="hidden" id="bizLogo" type="file" accept="image/*"></div><button class="btn" id="saveIdentity">${UI.save}<span>Guardar identidad</span></button></div><div class="section-card"><h3>WhatsApp y acceso</h3><div class="admin-grid two"><div class="field"><label>Número de WhatsApp</label><input class="input" id="bizWhatsapp" value="${esc(cfg.whatsapp)}"></div><div class="field"><label>Nuevo PIN</label><input class="input" id="bizPin" type="password" value="${esc(cfg.adminPin)}"></div></div><button class="btn" id="saveAccess">${UI.save}<span>Guardar</span></button></div><div class="section-card"><h3>Métodos de pago</h3><div id="paymentAdmin">${cfg.payments.map(p=>`<div class="admin-grid two" style="margin-bottom:8px"><input class="input" data-pay-title="${p.id}" value="${esc(p.title)}"><div class="row"><input class="input" data-pay-data="${p.id}" value="${esc(p.data)}"><button class="icon-btn" data-pay-delete="${p.id}">${UI.trash}</button></div></div>`).join('')}</div><div class="toolbar"><button class="btn secondary" id="addPayment">${UI.plus}<span>Agregar método</span></button><button class="btn" id="savePayments">${UI.save}<span>Guardar métodos</span></button></div></div><div class="section-card"><h3>Origen del negocio</h3><div class="field"><label>Dirección</label><input class="input" id="originAddress" value="${esc(cfg.origin.address)}"></div><button class="btn secondary" id="geocodeOrigin">${UI.pin}<span>Ubicar dirección</span></button><div class="small muted" style="margin:8px 0">También puedes dar clic en el mapa o mover el marcador.</div><div id="originMap" class="map"></div><label class="row" style="margin-top:10px"><input type="checkbox" id="deliveryEnabled" ${cfg.deliveryEnabled?'checked':''}><span>Activar envío a domicilio</span></label></div>`;bindBusinessAdmin();setTimeout(initOriginMap,100)}
+function bindBusinessAdmin(){const adminStatus=document.getElementById('adminSupabaseStatus');if(adminStatus){adminStatus.dataset.kind=supabaseConnectionState==='ok'?'ok':supabaseConnectionState==='error'?'error':'warn';adminStatus.innerHTML=(supabaseConnectionState==='ok'?UI.check:supabaseConnectionState==='error'?UI.close:UI.database)+`<span>${esc(supabaseLastError||'Supabase listo.')}</span>`}
+document.getElementById('retrySupabase').onclick=async()=>{try{await initSupabase();toast('Prueba de Supabase completada.','ok');renderBusinessAdmin(document.getElementById('adminContent'))}catch(e){toast(explainSupabaseError(e),'error')}};
+  document.getElementById('saveIdentity').onclick=()=>{state.config.businessName=document.getElementById('bizName').value.trim()||defaults.config.businessName;state.config.tagline=document.getElementById('bizTagline').value.trim();save();renderHeader();toast('Identidad guardada.','ok')};document.getElementById('bizLogo').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{state.config.logo=r.result;save();renderHeader()};r.readAsDataURL(f)};document.getElementById('saveAccess').onclick=()=>{const w=document.getElementById('bizWhatsapp').value.replace(/\D/g,''),p=document.getElementById('bizPin').value.trim();if(!w||!p){toast('Completa WhatsApp y PIN.','error');return}state.config.whatsapp=w;state.config.adminPin=p;save();toast('Datos de acceso guardados.','ok')};document.getElementById('addPayment').onclick=()=>{state.config.payments.push({id:uid('pay'),title:'Nuevo método',data:'Dato para copiar'});save();renderBusinessAdmin(document.getElementById('adminContent'))};document.getElementById('savePayments').onclick=()=>{state.config.payments.forEach(p=>{p.title=document.querySelector(`[data-pay-title="${p.id}"]`)?.value.trim()||p.title;p.data=document.querySelector(`[data-pay-data="${p.id}"]`)?.value.trim()||p.data});save();toast('Métodos guardados.','ok')};document.querySelectorAll('[data-pay-delete]').forEach(b=>b.onclick=()=>{state.config.payments=state.config.payments.filter(p=>p.id!==b.dataset.payDelete);save();renderBusinessAdmin(document.getElementById('adminContent'))});document.getElementById('geocodeOrigin').onclick=()=>geocodeAddress(document.getElementById('originAddress').value,'origin');document.getElementById('deliveryEnabled').onchange=e=>{state.config.deliveryEnabled=e.target.checked;save()}}
+function initOriginMap(){if(!document.getElementById('originMap')||typeof L==='undefined')return;if(originMap){originMap.remove();originMap=null}const o=state.config.origin;originMap=L.map('originMap').setView([o.lat,o.lng],14);if(!addConfiguredTileLayer(originMap,'originMap')){originMap.remove();originMap=null;return;}originMarker=L.marker([o.lat,o.lng],{draggable:true}).addTo(originMap);const set=e=>{const ll=e.latlng||e.target.getLatLng();state.config.origin.lat=ll.lat;state.config.origin.lng=ll.lng;save()};originMap.on('click',e=>{originMarker.setLatLng(e.latlng);set(e)});originMarker.on('dragend',set)}
+function renderTripAdmin(c){const s=state.config.shipping;c.innerHTML=`<div class="section-card"><h3>Ruta y distancia</h3><div class="field"><label>Origen</label><input class="input" value="${esc(state.config.origin.address)}" disabled></div><div class="field"><label>Destino</label><input class="input" id="tripDestination" placeholder="Escribe una dirección"></div><button class="btn secondary" id="tripGeocode">${UI.pin}<span>Buscar destino</span></button><div class="small muted" style="margin:8px 0">También puedes dar clic en el mapa para fijar el destino.</div><div id="tripMap" class="map"></div><label class="row" style="margin-top:10px"><input type="checkbox" id="roundTrip" ${s.roundTrip?'checked':''}><span>Ida y vuelta</span></label></div><div class="section-card"><h3>Vehículo y combustible</h3><div class="field"><label>Vehículo</label><select class="select" id="vehicle"><option value="moto" ${s.vehicle==='moto'?'selected':''}>Moto</option><option value="auto" ${s.vehicle==='auto'?'selected':''}>Auto</option><option value="truck" ${s.vehicle==='truck'?'selected':''}>Camioneta</option><option value="bike" ${s.vehicle==='bike'?'selected':''}>Bicicleta u otro</option></select></div><div class="admin-grid two">${[['Moto','moto',UI.moto],['Auto','auto',UI.car],['Camioneta','truck',UI.truck],['Bicicleta u otro','bike',UI.bike]].map(([lab,key,ico])=>`<div class="field"><label class="row">${ico}<span>${lab} km/l</span></label><input class="input" type="number" step="0.1" data-eff="${key}" value="${s.efficiency[key]}"></div>`).join('')}</div><div class="field"><label>Combustible</label><select class="select" id="fuelType">${['Magna','Premium','Diésel'].map(f=>`<option ${s.fuel===f?'selected':''}>${f}</option>`).join('')}</select></div><div class="admin-grid two">${['Magna','Premium','Diésel'].map(f=>`<div class="field"><label>${f} precio por litro</label><input class="input" type="number" step="0.01" data-fuel="${f}" value="${s.fuelPrice[f]}"></div>`).join('')}</div></div><div class="section-card"><h3>Tarifa de envío</h3><div class="admin-grid two"><div class="field"><label>Costo base</label><input class="input" id="shipBase" type="number" step="0.01" value="${s.base}"></div><div class="field"><label>Tarifa por km</label><input class="input" id="shipPerKm" type="number" step="0.01" value="${s.perKm}"></div><div class="field"><label>Margen de ganancia</label><input class="input" id="shipMargin" type="number" step="0.1" value="${s.margin}"></div><div class="field"><label>Redondeo</label><input class="input" id="shipRound" type="number" step="1" value="${s.rounding}"></div><div class="field"><label>Envío gratis desde</label><input class="input" id="shipFree" type="number" step="1" value="${s.freeFrom}"></div></div></div><div class="section-card"><h3>Resultado</h3><div class="result-grid"><div class="metric"><strong id="resKm">0.00 km</strong><span>Distancia</span></div><div class="metric"><strong id="resLiters">0.00 l</strong><span>Litros</span></div><div class="metric"><strong id="resFuel">${money(0)}</strong><span>Costo combustible</span></div><div class="metric"><strong id="resSuggested">${money(0)}</strong><span>Envío sugerido</span></div></div><div class="toolbar" style="margin-top:12px"><button class="btn" id="useRate">${UI.save}<span>Usar esta tarifa</span></button></div></div>`;bindTripAdmin();setTimeout(initTripMap,100)}
+let tripKm=0;
+function bindTripAdmin(){document.getElementById('tripGeocode').onclick=()=>geocodeAddress(document.getElementById('tripDestination').value,'trip');document.getElementById('roundTrip').onchange=e=>{state.config.shipping.roundTrip=e.target.checked;save();recalcTrip()};document.querySelectorAll('[data-eff]').forEach(i=>i.oninput=e=>{state.config.shipping.efficiency[e.target.dataset.eff]=Number(e.target.value)||0;recalcTrip()});document.querySelectorAll('[data-fuel]').forEach(i=>i.oninput=e=>{state.config.shipping.fuelPrice[e.target.dataset.fuel]=Number(e.target.value)||0;recalcTrip()});document.getElementById('vehicle').onchange=e=>{state.config.shipping.vehicle=e.target.value;recalcTrip()};document.getElementById('fuelType').onchange=e=>{state.config.shipping.fuel=e.target.value;recalcTrip()};['shipBase','shipPerKm','shipMargin','shipRound','shipFree'].forEach(id=>document.getElementById(id).oninput=recalcTrip);document.getElementById('useRate').onclick=()=>{const s=state.config.shipping;s.base=Number(document.getElementById('shipBase').value)||0;s.perKm=Number(document.getElementById('shipPerKm').value)||0;s.margin=Number(document.getElementById('shipMargin').value)||0;s.rounding=Number(document.getElementById('shipRound').value)||0;s.freeFrom=Number(document.getElementById('shipFree').value)||0;save();toast('Tarifa de envío guardada.','ok')}}
+function initTripMap(){if(!document.getElementById('tripMap')||typeof L==='undefined')return;if(tripMap){tripMap.remove();tripMap=null}const o=state.config.origin;tripMap=L.map('tripMap').setView([o.lat,o.lng],13);if(!addConfiguredTileLayer(tripMap,'tripMap')){tripMap.remove();tripMap=null;return;}tripOriginMarker=L.marker([o.lat,o.lng]).addTo(tripMap);tripMap.on('click',e=>setTripDestination(e.latlng.lat,e.latlng.lng))}
+async function setTripDestination(lat,lng){if(!tripMap)return;if(tripDestMarker)tripDestMarker.setLatLng([lat,lng]);else tripDestMarker=L.marker([lat,lng],{draggable:true}).addTo(tripMap);tripDestMarker.on('dragend',e=>{const ll=e.target.getLatLng();setTripDestination(ll.lat,ll.lng)});const o=state.config.origin,res=await routeDistance(o.lat,o.lng,lat,lng);tripKm=res.km;if(tripRouteLayer){tripMap.removeLayer(tripRouteLayer);tripRouteLayer=null}if(res.geo){tripRouteLayer=L.geoJSON(res.geo).addTo(tripMap);tripMap.fitBounds(tripRouteLayer.getBounds(),{padding:[20,20]})}recalcTrip();if(res.fallback)toast('La ruta no respondió. Se usa una estimación de respaldo.','error')}
+function recalcTrip(){const s=state.config.shipping,km=tripKm*(document.getElementById('roundTrip')?.checked?2:1),veh=document.getElementById('vehicle')?.value||s.vehicle,fuel=document.getElementById('fuelType')?.value||s.fuel,eff=Number(document.querySelector(`[data-eff="${veh}"]`)?.value)||s.efficiency[veh],price=Number(document.querySelector(`[data-fuel="${fuel}"]`)?.value)||s.fuelPrice[fuel],liters=veh==='bike'?0:km/Math.max(eff,.1),fuelCost=liters*price,base=Number(document.getElementById('shipBase')?.value)||0,per=Number(document.getElementById('shipPerKm')?.value)||0,margin=Number(document.getElementById('shipMargin')?.value)||0,round=Number(document.getElementById('shipRound')?.value)||0;let suggested=(base+km*per+fuelCost)*(1+margin/100);if(round>0)suggested=Math.ceil(suggested/round)*round;document.getElementById('resKm').textContent=`${km.toFixed(2)} km`;document.getElementById('resLiters').textContent=`${liters.toFixed(2)} l`;document.getElementById('resFuel').textContent=money(fuelCost);document.getElementById('resSuggested').textContent=money(suggested)}
+function renderOrdersAdmin(c){c.innerHTML=`<div class="section-card"><h3>Historial de pedidos</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>Folio</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>${state.orders.length?state.orders.map(o=>`<tr><td>${esc(o.folio)}</td><td>${esc(new Date(o.date).toLocaleString('es-MX'))}</td><td>${esc(o.customer.name)}</td><td>${money(o.total)}</td><td><span class="status-badge status-${o.status}">${o.status==='pendiente'?UI.pending:o.status==='pagado'?UI.paid:UI.delivered}<span>${o.status}</span></span></td><td><div class="row"><select class="select" data-order-status="${o.id}"><option value="pendiente" ${o.status==='pendiente'?'selected':''}>Pendiente</option><option value="pagado" ${o.status==='pagado'?'selected':''}>Pagado</option><option value="entregado" ${o.status==='entregado'?'selected':''}>Entregado</option></select><button class="icon-btn" data-reprint="${o.id}">${UI.download}</button></div></td></tr>`).join(''):`<tr><td colspan="6">Todavía no hay pedidos.</td></tr>`}</tbody></table></div></div><div class="section-card"><h3>Respaldo</h3><div class="toolbar"><button class="btn" id="exportJson">${UI.download}<span>Exportar JSON</span></button><label class="btn secondary" for="importJson">${UI.upload}<span>Importar JSON</span></label><input class="hidden" id="importJson" type="file" accept="application/json"></div></div>`;document.querySelectorAll('[data-order-status]').forEach(s=>s.onchange=e=>{const o=state.orders.find(x=>x.id===e.target.dataset.orderStatus);if(o){o.status=e.target.value;save();renderOrdersAdmin(document.getElementById('adminContent'))}});document.querySelectorAll('[data-reprint]').forEach(b=>b.onclick=()=>reprintOrder(b.dataset.reprint));document.getElementById('exportJson').onclick=exportJson;document.getElementById('importJson').onchange=importJson}
+function exportJson(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='respaldo-maniobras.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function importJson(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const data=JSON.parse(r.result);state=merge(defaults,data);save();applyDesign();renderHeader();renderCategories();renderCatalog();renderOrdersAdmin(document.getElementById('adminContent'));toast('Respaldo importado.','ok')}catch(err){toast('El archivo JSON no es válido.','error')}};r.readAsText(f)}
+
+
+
+/* ==============================
+   CENTRO DE ORDENES Y COMPROBANTES V5
+============================== */
+const PAYMENT_LABELS={
+  WAITING_PAYMENT:'Pago pendiente de revisión',
+  PROCESSING:'Procesando comprobante',
+  PENDING_REVIEW:'En revisión',
+  APPROVED:'Pago aprobado',
+  REJECTED:'Pago rechazado'
+};
+function paymentBadge(status){
+  const s=PAYMENT_LABELS[status]?status:'WAITING_PAYMENT';
+  const ico=s==='APPROVED'?UI.check:s==='REJECTED'?UI.close:s==='PENDING_REVIEW'?UI.review:UI.pending;
+  return `<span class="payment-status ps-${s}">${ico}<span>${PAYMENT_LABELS[s]}</span></span>`;
+}
+async function safeSelect(table,query='*',opts={}){
+  if(!supabaseClient||!adminSession)throw new Error('Inicia sesión como administrador.');
+  let q=supabaseClient.from(table).select(query);
+  if(opts.order)q=q.order(opts.order,{ascending:opts.ascending??false});
+  if(opts.limit)q=q.limit(opts.limit);
+  const {data,error}=await q;
+  if(error)throw error;
+  return data||[];
+}
+async function renderAdminDashboard(c){
+  c.innerHTML=`<div class="section-card"><h3>Centro de órdenes</h3><div class="notice">El panel web administra pedidos y comprobantes. Telegram queda como canal interno y nunca se muestra al cliente.</div></div><div class="admin-dashboard" id="adminKpis"></div><div class="section-card"><h3>Órdenes recientes</h3><div id="adminRecent">Cargando...</div></div>`;
+  try{
+    const orders=await safeSelect('orders','id,folio,public_id,customer_name,total,payment_status,status,created_at',{order:'created_at',limit:100});
+    const counts={all:orders.length,WAITING_PAYMENT:0,PROCESSING:0,PENDING_REVIEW:0,APPROVED:0,REJECTED:0};
+    orders.forEach(o=>counts[o.payment_status||'WAITING_PAYMENT']=(counts[o.payment_status||'WAITING_PAYMENT']||0)+1);
+    document.getElementById('adminKpis').innerHTML=[
+      ['Total',counts.all,UI.orders],['En revisión',counts.PENDING_REVIEW,UI.review],['Aprobadas',counts.APPROVED,UI.check],['Rechazadas',counts.REJECTED,UI.close],['Procesando',counts.PROCESSING,UI.pending]
+    ].map(([l,v,i])=>`<div class="admin-kpi">${i}<span>${l}</span><strong>${v}</strong></div>`).join('');
+    document.getElementById('adminRecent').innerHTML=orders.length?`<div class="table-wrap"><table class="admin-table"><thead><tr><th>Orden</th><th>Cliente</th><th>Total</th><th>Pago</th><th>Fecha</th></tr></thead><tbody>${orders.slice(0,12).map(o=>`<tr><td>${esc(o.public_id||o.folio)}</td><td>${esc(o.customer_name||'')}</td><td>${money(o.total)}</td><td>${paymentBadge(o.payment_status||'WAITING_PAYMENT')}</td><td>${new Date(o.created_at).toLocaleString('es-MX')}</td></tr>`).join('')}</tbody></table></div>`:'Todavía no hay órdenes.';
+  }catch(e){
+    document.getElementById('adminKpis').innerHTML='';
+    document.getElementById('adminRecent').innerHTML=`<div class="notice">Ejecuta la migración V5 para habilitar el centro de órdenes. ${esc(e.message||'')}</div>`;
+  }
+}
+async function setPaymentDecision(orderId,status,reason=''){
+  if(!['APPROVED','REJECTED','PENDING_REVIEW'].includes(status))return;
+  const patch={payment_status:status,rejection_reason:status==='REJECTED'?reason:null,approved_at:status==='APPROVED'?new Date().toISOString():null,rejected_at:status==='REJECTED'?new Date().toISOString():null,reviewed_by:adminSession?.user?.id||null};
+  const {error}=await supabaseClient.from('orders').update(patch).eq('id',orderId);
+  if(error)throw error;
+  await supabaseClient.from('order_events').insert({order_id:orderId,event_type:status==='APPROVED'?'PAYMENT_APPROVED':status==='REJECTED'?'PAYMENT_REJECTED':'PAYMENT_REVIEW',new_status:status,source:'WEB',user_id:adminSession?.user?.id||null,metadata:{reason}});
+}
+async function renderPaymentReviewAdmin(c){
+  c.innerHTML=`<div class="section-card"><h3>Revisión de pagos</h3><div class="notice">La imagen del comprobante es evidencia auxiliar. La aprobación final se registra como decisión administrativa y queda auditada.</div></div><div class="review-list" id="reviewList">Cargando...</div>`;
+  try{
+    const [orders,receipts]=await Promise.all([
+      safeSelect('orders','id,folio,public_id,customer_name,total,expected_amount,payment_status,created_at',{order:'created_at',limit:250}),
+      safeSelect('receipts','*',{order:'created_at',limit:250})
+    ]);
+    const rm=new Map();receipts.forEach(r=>{if(!rm.has(String(r.order_id)))rm.set(String(r.order_id),r)});
+    const pending=orders.filter(o=>['PROCESSING','PENDING_REVIEW','REJECTED','WAITING_PAYMENT'].includes(o.payment_status||'WAITING_PAYMENT'));
+    const list=document.getElementById('reviewList');
+    list.innerHTML=pending.length?pending.map(o=>{const r=rm.get(String(o.id));return `<article class="review-card"><div class="review-card-head"><div><strong>${esc(o.public_id||o.folio)}</strong><div class="small muted">${esc(o.customer_name||'')}</div></div>${paymentBadge(o.payment_status||'WAITING_PAYMENT')}</div><div class="review-meta"><span>Esperado: ${money(o.expected_amount??o.total)}</span>${r?.detected_amount!=null?`<span>Detectado: ${money(r.detected_amount)}</span>`:''}${r?.detected_bank?`<span>Banco: ${esc(r.detected_bank)}</span>`:''}${r?.detected_reference?`<span>Referencia: ${esc(r.detected_reference)}</span>`:''}${r?.confidence!=null?`<span>Confianza: ${Math.round(Number(r.confidence)*100)}%</span>`:''}</div><div class="review-actions">${r?`<button class="btn secondary" data-view-receipt="${r.id}">${UI.receipt}<span>Ver comprobante</span></button>`:''}<button class="btn success" data-payment-approve="${o.id}">${UI.check}<span>Aprobar</span></button><button class="btn danger" data-payment-reject="${o.id}">${UI.close}<span>Rechazar</span></button></div></article>`}).join(''):`<div class="notice">No hay pagos pendientes de revisión.</div>`;
+    document.querySelectorAll('[data-payment-approve]').forEach(b=>b.onclick=async()=>{try{await setPaymentDecision(b.dataset.paymentApprove,'APPROVED');toast('Pago aprobado.','ok');renderPaymentReviewAdmin(c)}catch(e){toast(e.message,'error')}});
+    document.querySelectorAll('[data-payment-reject]').forEach(b=>b.onclick=async()=>{const reason=prompt('Motivo del rechazo:','Comprobante no válido')||'Rechazado por administrador';try{await setPaymentDecision(b.dataset.paymentReject,'REJECTED',reason);toast('Pago rechazado.','ok');renderPaymentReviewAdmin(c)}catch(e){toast(e.message,'error')}});
+    document.querySelectorAll('[data-view-receipt]').forEach(b=>b.onclick=()=>openReceiptSecure(b.dataset.viewReceipt));
+  }catch(e){document.getElementById('reviewList').innerHTML=`<div class="notice">No se pudo cargar revisión de pagos. ${esc(e.message||'')}</div>`}
+}
+async function openReceiptSecure(receiptId){
+  try{
+    const {data:r,error}=await supabaseClient.from('receipts').select('file_path,file_url').eq('id',receiptId).single();
+    if(error)throw error;
+    if(r.file_path){
+      const {data,error:se}=await supabaseClient.storage.from('receipts-private').createSignedUrl(r.file_path,120);
+      if(se)throw se;
+      window.open(data.signedUrl,'_blank','noopener');
+    }else if(r.file_url){window.open(r.file_url,'_blank','noopener')}
+  }catch(e){toast('No se pudo abrir el comprobante.','error')}
+}
+async function renderReceiptsAdmin(c){
+  c.innerHTML=`<div class="section-card"><h3>Comprobantes</h3><div class="notice">Los archivos se mantienen privados y se abren mediante enlaces firmados temporales.</div></div><div id="receiptsAdmin">Cargando...</div>`;
+  try{
+    const [receipts,orders]=await Promise.all([safeSelect('receipts','*',{order:'created_at',limit:300}),safeSelect('orders','id,folio,public_id,customer_name,total')]);
+    const om=new Map(orders.map(o=>[String(o.id),o]));
+    document.getElementById('receiptsAdmin').innerHTML=receipts.length?`<div class="table-wrap"><table class="admin-table"><thead><tr><th>Orden</th><th>Archivo</th><th>Hash</th><th>Monto detectado</th><th>Banco</th><th>Confianza</th><th>Fecha</th><th></th></tr></thead><tbody>${receipts.map(r=>{const o=om.get(String(r.order_id));return `<tr><td>${esc(o?.public_id||o?.folio||r.order_id)}</td><td>${esc(r.original_name||'Comprobante')}</td><td>${esc((r.file_hash||'').slice(0,12))}</td><td>${r.detected_amount!=null?money(r.detected_amount):'Pendiente'}</td><td>${esc(r.detected_bank||'')}</td><td>${r.confidence!=null?Math.round(Number(r.confidence)*100)+'%':''}</td><td>${new Date(r.created_at).toLocaleString('es-MX')}</td><td><button class="icon-btn" data-view-receipt="${r.id}" aria-label="Ver">${UI.receipt}</button></td></tr>`}).join('')}</tbody></table></div>`:'<div class="notice">Todavía no hay comprobantes almacenados.</div>';
+    document.querySelectorAll('[data-view-receipt]').forEach(b=>b.onclick=()=>openReceiptSecure(b.dataset.viewReceipt));
+  }catch(e){document.getElementById('receiptsAdmin').innerHTML=`<div class="notice">Ejecuta la migración V5 para habilitar comprobantes. ${esc(e.message||'')}</div>`}
+}
+async function renderAuditAdmin(c){
+  c.innerHTML=`<div class="section-card"><h3>Auditoría</h3><div class="notice">Historial de cambios de estado y decisiones administrativas.</div></div><div class="audit-list" id="auditList">Cargando...</div>`;
+  try{
+    const events=await safeSelect('order_events','*',{order:'created_at',limit:300});
+    document.getElementById('auditList').innerHTML=events.length?events.map(e=>`<div class="audit-item"><strong>${esc(e.event_type||'EVENTO')}</strong> · ${esc(e.source||'SYSTEM')}<div class="small muted">${new Date(e.created_at).toLocaleString('es-MX')} · ${esc(e.old_status||'')} ${e.new_status?'→ '+esc(e.new_status):''}</div></div>`).join(''):'<div class="notice">Todavía no hay eventos registrados.</div>';
+  }catch(e){document.getElementById('auditList').innerHTML=`<div class="notice">Ejecuta la migración V5 para habilitar auditoría. ${esc(e.message||'')}</div>`}
+}
+async function invokeTelegramAdmin(action){
+  if(!supabaseClient||!adminSession)throw new Error('Inicia sesión como administrador.');
+  const {data,error}=await supabaseClient.functions.invoke('telegram-admin',{body:{action}});
+  if(error)throw error;
+  if(data?.error)throw new Error(data.error);
+  return data;
+}
+function renderIntegrationsAdmin(c){
+  c.innerHTML=`<div class="integration-grid"><div class="integration-card">${UI.telegram}<h3>Telegram administrativo</h3><p class="small muted">Telegram es interno. El navegador nunca recibe el token del bot.</p><div class="code-note">TELEGRAM_BOT_TOKEN
+TELEGRAM_ADMIN_CHAT_ID
+TELEGRAM_ADMIN_USER_ID
+TELEGRAM_WEBHOOK_SECRET
+PUBLIC_SITE_URL</div><div class="toolbar" style="margin-top:12px"><button class="btn secondary" id="tgStatus">${UI.refresh}<span>Comprobar</span></button><button class="btn" id="tgWebhook">${UI.telegram}<span>Configurar webhook</span></button><button class="btn ghost" id="tgTest">${UI.telegram}<span>Mensaje de prueba</span></button></div><div id="tgResult" class="small muted"></div></div><div class="integration-card">${UI.shield}<h3>Validación de comprobantes</h3><p class="small muted">El sistema guarda hashes, datos detectados y señales de inconsistencia. La IA no tiene autoridad absoluta para aprobar un pago.</p><div class="code-note">WAITING_PAYMENT
+PROCESSING
+PENDING_REVIEW
+APPROVED
+REJECTED</div></div></div>`;
+  const out=document.getElementById('tgResult');
+  document.getElementById('tgStatus').onclick=async()=>{try{out.textContent='Consultando...';out.textContent=JSON.stringify(await invokeTelegramAdmin('status'))}catch(e){out.textContent=e.message}};
+  document.getElementById('tgWebhook').onclick=async()=>{try{out.textContent='Configurando...';out.textContent=JSON.stringify(await invokeTelegramAdmin('set_webhook'))}catch(e){out.textContent=e.message}};
+  document.getElementById('tgTest').onclick=async()=>{try{out.textContent='Enviando...';out.textContent=JSON.stringify(await invokeTelegramAdmin('test'))}catch(e){out.textContent=e.message}};
+}
+async function uploadReceiptForOrder(order){
+  if(!checkout.proofFile||!supabaseClient)return {ok:false,skipped:true};
+  try{
+    const form=new FormData();
+    form.append('public_id',order.publicId||order.public_id||order.folio);
+    form.append('file',checkout.proofFile,checkout.proofName||checkout.proofFile.name);
+    const {data,error}=await supabaseClient.functions.invoke('receipt-upload',{body:form});
+    if(error)throw error;
+    if(data?.error)throw new Error(data.error);
+    return {ok:true,data};
+  }catch(e){
+    console.error('Receipt upload:',e);
+    toast('El pedido se creó, pero el comprobante no pudo guardarse en el sistema. Conserva el archivo y avisa al negocio.','error');
+    return {ok:false,error:e};
+  }
+}
+
+/* ==============================
+   SUPABASE: ADMIN, PEDIDOS Y SEGURIDAD
+============================== */
+async function adminSignOut(){
+  if(supabaseClient)await supabaseClient.auth.signOut();
+  adminSession=null;closeModal('adminModal');toast('Sesión administrativa cerrada.','ok');
+}
+function renderBusinessAdmin(c){
+  const cfg=state.config,m=mapSettings(),email=adminSession?.user?.email||'';
+  c.innerHTML=`<div class="section-card"><h3>Identidad</h3><div class="admin-grid two"><div class="field"><label>Nombre del negocio</label><input class="input" id="bizName" value="${esc(cfg.businessName)}"></div><div class="field"><label>Eslogan</label><input class="input" id="bizTagline" value="${esc(cfg.tagline)}"></div></div><div class="field"><label>Logo</label><label class="btn secondary" for="bizLogo">${UI.upload}<span>Subir logo</span></label><input class="hidden" id="bizLogo" type="file" accept="image/*"></div><button class="btn" id="saveIdentity">${UI.save}<span>Guardar identidad</span></button></div>
+  <div class="section-card"><h3>WhatsApp</h3><div class="field"><label>Número internacional sin signo de suma</label><input class="input" id="bizWhatsapp" value="${esc(cfg.whatsapp)}"></div><button class="btn" id="saveAccess">${UI.save}<span>Guardar WhatsApp</span></button></div>
+  <div class="section-card"><h3>Seguridad del administrador</h3><div class="notice">Sesión activa: ${esc(email||'Administrador')}</div><div class="admin-grid two" style="margin-top:10px"><div class="field"><label>Nueva contraseña</label><input class="input" id="newAdminPassword" type="password" autocomplete="new-password" minlength="8"></div><div class="field"><label>Confirmar nueva contraseña</label><input class="input" id="confirmAdminPassword" type="password" autocomplete="new-password" minlength="8"></div></div><div class="toolbar"><button class="btn" id="changePassword">${UI.lock}<span>Cambiar contraseña</span></button><button class="btn ghost" id="adminLogout">${UI.lock}<span>Cerrar sesión</span></button></div></div>
+  <div class="section-card"><h3>Conexión Supabase</h3><div class="supabase-status" id="adminSupabaseStatus" data-kind="warn">${UI.database}<span>Estado de conexión pendiente.</span></div><div class="toolbar" style="margin-top:10px"><button class="btn secondary" id="retrySupabase">${UI.refresh}<span>Probar conexión</span></button></div></div><div class="section-card"><h3>CARTO</h3><div class="notice">Usa tu API key de CARTO Basemaps. La app agregará la clave automáticamente a las solicitudes de tiles y mantendrá visible la atribución de OpenStreetMap y CARTO.</div><div class="admin-grid two" style="margin-top:10px"><div class="field"><label>API key de CARTO</label><input class="input" id="cartoApiKey" type="password" value="${esc(m.apiKey||'')}" placeholder="Pega tu API key"></div><div class="field"><label>Estilo del mapa</label><select class="select" id="cartoStyle"><option value="voyager" ${m.style==='voyager'?'selected':''}>Voyager</option><option value="light_all" ${m.style==='light_all'?'selected':''}>Positron</option><option value="dark_all" ${m.style==='dark_all'?'selected':''}>Dark Matter</option></select></div></div><button class="btn" id="saveMapConfig">${UI.map}<span>Guardar CARTO</span></button></div>
+  <div class="section-card"><h3>Métodos de pago</h3><div id="paymentAdmin">${cfg.payments.map(p=>`<div class="admin-grid two" style="margin-bottom:8px"><input class="input" data-pay-title="${p.id}" value="${esc(p.title)}"><div class="row"><input class="input" data-pay-data="${p.id}" value="${esc(p.data)}"><button class="icon-btn" data-pay-delete="${p.id}">${UI.trash}</button></div></div>`).join('')}</div><div class="toolbar"><button class="btn secondary" id="addPayment">${UI.plus}<span>Agregar método</span></button><button class="btn" id="savePayments">${UI.save}<span>Guardar métodos</span></button></div></div>
+  <div class="section-card"><h3>Origen del negocio</h3><div class="field"><label>Dirección</label><input class="input" id="originAddress" value="${esc(cfg.origin.address)}"></div><button class="btn secondary" id="geocodeOrigin">${UI.pin}<span>Ubicar dirección</span></button><div class="small muted" style="margin:8px 0">También puedes dar clic en el mapa o mover el marcador.</div><div id="originMap" class="map"></div><label class="row" style="margin-top:10px"><input type="checkbox" id="deliveryEnabled" ${cfg.deliveryEnabled?'checked':''}><span>Activar envío a domicilio</span></label></div>`;
+  bindBusinessAdmin();setTimeout(initOriginMap,100);
+}
+function bindBusinessAdmin(){
+  document.getElementById('saveIdentity').onclick=()=>{state.config.businessName=document.getElementById('bizName').value.trim()||defaults.config.businessName;state.config.tagline=document.getElementById('bizTagline').value.trim();save();renderHeader();toast('Identidad guardada.','ok')};
+  document.getElementById('bizLogo').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{state.config.logo=r.result;save();renderHeader()};r.readAsDataURL(f)};
+  document.getElementById('saveAccess').onclick=()=>{const w=document.getElementById('bizWhatsapp').value.replace(/\D/g,'');if(!w){toast('Escribe el número de WhatsApp.','error');return}state.config.whatsapp=w;save();toast('WhatsApp guardado.','ok')};
+  document.getElementById('changePassword').onclick=changeAdminPassword;
+  document.getElementById('adminLogout').onclick=adminSignOut;
+  document.getElementById('saveMapConfig').onclick=()=>{
+    const apiKey=document.getElementById('cartoApiKey').value.trim();
+    const style=document.getElementById('cartoStyle').value;
+    if(!apiKey){toast('Pega tu API key de CARTO.','error');return}
+    state.config.map={provider:'carto',apiKey,style,attribution:'OpenStreetMap contributors, CARTO'};
+    save();toast('CARTO guardado.','ok');setTimeout(initOriginMap,100);
+  };
+  document.getElementById('addPayment').onclick=()=>{state.config.payments.push({id:uid('pay'),title:'Nuevo método',data:'Dato para copiar'});save();renderBusinessAdmin(document.getElementById('adminContent'))};
+  document.getElementById('savePayments').onclick=()=>{state.config.payments=state.config.payments.map(p=>({...p,title:document.querySelector(`[data-pay-title="${p.id}"]`)?.value.trim()||p.title,data:document.querySelector(`[data-pay-data="${p.id}"]`)?.value.trim()||p.data}));save();toast('Métodos de pago guardados.','ok')};
+  document.querySelectorAll('[data-pay-delete]').forEach(b=>b.onclick=()=>{state.config.payments=state.config.payments.filter(p=>p.id!==b.dataset.payDelete);save();renderBusinessAdmin(document.getElementById('adminContent'))});
+  document.getElementById('geocodeOrigin').onclick=()=>geocodeAddress(document.getElementById('originAddress').value,'origin');
+  document.getElementById('deliveryEnabled').onchange=e=>{state.config.deliveryEnabled=e.target.checked;save()};
+}
+async function changeAdminPassword(){
+  if(!supabaseClient||!adminSession){toast('Inicia sesión como administrador.','error');return}
+  const a=document.getElementById('newAdminPassword')?.value||'';
+  const b=document.getElementById('confirmAdminPassword')?.value||'';
+  if(a.length<8){toast('La nueva contraseña debe tener al menos 8 caracteres.','error');return}
+  if(a!==b){toast('Las contraseñas no coinciden.','error');return}
+  const {error}=await supabaseClient.auth.updateUser({password:a});
+  if(error){toast(error.message||'No se pudo cambiar la contraseña.','error');return}
+  document.getElementById('newAdminPassword').value='';
+  document.getElementById('confirmAdminPassword').value='';
+  toast('Contraseña actualizada.','ok');
+}
+function cloudOrderToState(o){
+  return {id:String(o.id),folio:o.folio,publicId:o.public_id||o.folio,date:o.created_at,dateText:new Date(o.created_at).toLocaleString('es-MX'),
+    customer:{name:o.customer_name,phone:o.customer_phone,email:o.customer_email||'',notes:o.notes||''},
+    items:Array.isArray(o.items)?o.items:[],subtotal:Number(o.subtotal)||0,shipping:Number(o.shipping)||0,total:Number(o.total)||0,
+    expectedAmount:Number(o.expected_amount??o.total)||0,paymentStatus:o.payment_status||'WAITING_PAYMENT',
+    approvedAt:o.approved_at||null,rejectedAt:o.rejected_at||null,rejectionReason:o.rejection_reason||'',
+    paymentTitle:o.payment_title||'',delivery:{type:o.delivery_type,label:o.delivery_type==='pickup'?'Recoger en sitio':'Domicilio',address:o.delivery_address||'',km:Number(o.distance_km)||0},status:o.status||'pendiente'};
+}
+async function fetchCloudOrders(){
+  if(!supabaseClient||!adminSession)return;
+  const {data,error}=await supabaseClient.from('orders').select('*').order('created_at',{ascending:false}).limit(500);
+  if(error)throw error;
+  state.orders=(data||[]).map(cloudOrderToState);saveLocal();
+}
+function renderOrdersAdmin(c,skipFetch=false){
+  c.innerHTML=`<div class="section-card"><h3>Historial de pedidos</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>Folio</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>${state.orders.length?state.orders.map(o=>`<tr><td>${esc(o.folio)}</td><td>${esc(new Date(o.date).toLocaleString('es-MX'))}</td><td>${esc(o.customer.name)}</td><td>${money(o.total)}</td><td><span class="status-badge status-${o.status}">${o.status==='pendiente'?UI.pending:o.status==='pagado'?UI.paid:UI.delivered}<span>${o.status}</span></span></td><td><div class="row"><select class="select" data-order-status="${o.id}"><option value="pendiente" ${o.status==='pendiente'?'selected':''}>Pendiente</option><option value="pagado" ${o.status==='pagado'?'selected':''}>Pagado</option><option value="entregado" ${o.status==='entregado'?'selected':''}>Entregado</option></select><button class="icon-btn" data-reprint="${o.id}">${UI.download}</button></div></td></tr>`).join(''):`<tr><td colspan="6">Todavía no hay pedidos.</td></tr>`}</tbody></table></div></div><div class="section-card"><h3>Respaldo</h3><div class="toolbar"><button class="btn" id="exportJson">${UI.download}<span>Exportar JSON</span></button><label class="btn secondary" for="importJson">${UI.upload}<span>Importar JSON</span></label><input class="hidden" id="importJson" type="file" accept="application/json"></div></div>`;
+  document.querySelectorAll('[data-order-status]').forEach(s=>s.onchange=async e=>{const o=state.orders.find(x=>x.id===e.target.dataset.orderStatus);if(!o)return;o.status=e.target.value;saveLocal();if(supabaseClient&&adminSession){const {error}=await supabaseClient.from('orders').update({status:o.status}).eq('id',o.id);if(error)toast('No se pudo actualizar el estado.','error')}renderOrdersAdmin(document.getElementById('adminContent'),true)});
+  document.querySelectorAll('[data-reprint]').forEach(b=>b.onclick=()=>reprintOrder(b.dataset.reprint));
+  document.getElementById('exportJson').onclick=exportJson;document.getElementById('importJson').onchange=importJson;
+  if(!skipFetch&&supabaseClient&&adminSession)fetchCloudOrders().then(()=>{if(activeAdmin==='orders')renderOrdersAdmin(document.getElementById('adminContent'),true)}).catch(()=>toast('No se pudo cargar el historial de Supabase.','error'));
+}
+async function confirmOrder(){
+  const items=cartItems(),pay=state.config.payments.find(x=>x.id===checkout.paymentId);
+  if(supabaseClient&&cloudReady){
+    try{
+      const payloadItems=items.map(x=>({id:String(x.p.id),qty:x.qty}));
+      const {data,error}=await supabaseClient.rpc('submit_order',{
+        p_customer:{name:checkout.name,phone:checkout.phone,notes:checkout.notes},
+        p_delivery:{type:checkout.delivery,address:checkout.delivery==='delivery'?checkout.address:'',lat:checkout.lat,lng:checkout.lng,distance_km:checkout.delivery==='delivery'?checkout.distance:0},
+        p_payment_title:pay?.title||'',
+        p_items:payloadItems
+      });
+      if(error)throw error;
+      const order=cloudOrderToState(data);
+      const receiptResult=await uploadReceiptForOrder(order);
+      if(receiptResult.ok)order.paymentStatus='PENDING_REVIEW';
+      lastPdfBlob=await buildPdf(order);lastPdfName=`pedido-${order.folio}.pdf`;lastOrderId=order.id;
+      state.cart={};saveLocal();await loadPublicCloudState();renderCatalog();updateCartCount();renderPostConfirm(order);return;
+    }catch(e){toast(e?.message||'No se pudo registrar el pedido. Intenta nuevamente.','error');return}
+  }
+  const folio=nextFolio(),now=new Date(),order={id:uid('o'),folio,date:now.toISOString(),dateText:now.toLocaleString('es-MX'),customer:{name:checkout.name,phone:checkout.phone,notes:checkout.notes},items:items.map(x=>({id:x.p.id,name:x.p.name,qty:x.qty,price:x.p.price,total:x.qty*x.p.price})),subtotal:subtotal(),shipping:checkout.shipping,total:subtotal()+checkout.shipping,paymentId:checkout.paymentId,paymentTitle:pay?.title||'',delivery:{type:checkout.delivery,label:checkout.delivery==='pickup'?'Recoger en sitio':'Domicilio',address:checkout.delivery==='delivery'?checkout.address:'',km:checkout.delivery==='delivery'?checkout.distance:0},status:'pendiente'};
+  lastPdfBlob=await buildPdf(order);lastPdfName=`pedido-${folio}.pdf`;lastOrderId=order.id;state.orders.unshift(order);state.folioSeq++;items.forEach(x=>{x.p.stock=Math.max(0,x.p.stock-x.qty)});state.cart={};saveLocal();renderCatalog();updateCartCount();renderPostConfirm(order);
+}
+
+/* MANIOBRAS: delivery workspace and compatibility with the supplied catalog backend.
+   Production: use an independent Supabase project with the original catalog SQL/RPC and
+   the three receipt/Telegram functions. Configuration never writes to the supplied project. */
+defaults.config.socials={facebook:'',instagram:'',tiktok:'',x:'',website:'',whatsappChannel:''};
+defaults.config.origin.confirmed=false;
+defaults.config.tripPricing={perKm:8,includeFuel:true};
+state.config=merge(defaults.config,state.config);
+checkout.number='';checkout.references='';checkout.callPhone='';checkout.documents='';checkout.destinationConfirmed=false;
+let publicMap=null,publicOriginPin=null,publicDestPin=null,publicRoute=null,routeSerial=0,searchSerial=0,routeLoading=false,currentRoute=null,orderBusy=false,lastManiobraOrder=null;
+const baseRenderHeader=renderHeader,baseRenderCatalog=renderCatalog,baseChangeQty=changeQty,baseBusinessAdmin=renderBusinessAdmin,baseBindBusiness=bindBusinessAdmin,baseApplyTheme=applyPublicTheme,baseLoadPublic=loadPublicCloudState,baseCloudOrder=cloudOrderToState;
+const SOCIAL_ICONS={
+facebook:'<svg viewBox="0 0 24 24"><path d="M14 22V13h3l1-4h-4V6c0-1 1-2 2-2h2V1h-3c-4 0-6 2-6 5v3H6v4h3v9"/></svg>',
+instagram:'<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".7"/></svg>',
+tiktok:'<svg viewBox="0 0 24 24"><path d="M14 3v13a5 5 0 1 1-5-5M14 3c1 4 4 6 7 6V5c-3 0-4-1-4-2z"/></svg>',
+x:'<svg viewBox="0 0 24 24"><path d="m4 3 16 18h-5L3 3h5l13 18M21 3 3 21"/></svg>',
+website:FOOD.globe,whatsappChannel:UI.whatsapp};
+const socialNames={facebook:'Facebook',instagram:'Instagram',tiktok:'TikTok',x:'X',website:'Sitio web',whatsappChannel:'Canal de WhatsApp'};
+function validLink(url){try{const u=new URL(url);return u.protocol==='https:'||u.protocol==='http:'}catch{return false}}
+function ensureService(){const service=state.products.find(p=>p.id==='servicio');if(service&&service.active)state.cart.servicio=1;const doc=state.products.find(p=>p.id==='documentos');if(doc&&doc.active&&!(state.cart.documentos>0))state.cart.documentos=1}
+function serviceAmount(){return Number(state.products.find(p=>p.id==='servicio')?.price||0)}
+function materialsAmount(){return cartItems().filter(x=>x.p.id!=='servicio'&&x.p.id!=='documentos').reduce((t,x)=>t+x.p.price*x.qty,0)}
+function docsAmount(){const x=cartItems().find(x=>x.p.id==='documentos');return x?x.qty*x.p.price:0}
+function getTripCost(km){const s=state.config.shipping;const distance=km*(s.roundTrip?2:1);const liters=s.vehicle==='bike'?0:distance/Math.max(.1,Number(s.efficiency[s.vehicle])||.1);const fuel=liters*(Number(s.fuelPrice[s.fuel])||0);const rate=Number(state.config.tripPricing?.perKm??s.perKm)||0;const raw=(Number(s.base||0)+distance*rate+(state.config.tripPricing?.includeFuel?fuel:0))*(1+Number(s.margin||0)/100);const total=s.rounding>0?Math.ceil(raw/s.rounding)*s.rounding:raw;return {distance,liters,fuel,total:Math.max(0,Math.round(total*100)/100)}}
+// The supplied submit_order uses shipping.perKm. Store the equivalent km rate so
+// server and browser totals use the same formula, including return and fuel.
+function equivalentShippingRate(){const s=state.config.shipping,t=state.config.tripPricing;const fuel=s.vehicle==='bike'||!t.includeFuel?0:Number(s.fuelPrice[s.fuel]||0)/Math.max(.1,Number(s.efficiency[s.vehicle])||.1);s.perKm=(Number(t.perKm||0)+fuel)*(s.roundTrip?2:1);s.freeFrom=0}
+shippingCost=function(distance){return getTripCost(distance).total};
+renderHeader=function(){baseRenderHeader();document.getElementById('brandLogo').innerHTML=state.config.logo?`<img src="${esc(state.config.logo)}" alt="Logo">`:FOOD.files;document.getElementById('continueDelivery').innerHTML=FOOD.receipt+'<span>Revisar solicitud</span>';document.getElementById('reviewDelivery').innerHTML=UI.orders+'<span>Continuar con mi entrega</span>';document.getElementById('findStreet').innerHTML=UI.search;renderPublicOrigin();renderSocials();renderLiveTicket()};
+function renderPublicOrigin(){const o=state.config.origin;document.getElementById('publicOrigin').textContent=o.confirmed?`Salida: ${o.address} · ${o.lat.toFixed(5)}, ${o.lng.toFixed(5)}`:'El proveedor debe confirmar su punto de salida antes de cotizar.'}
+function renderSocials(){document.getElementById('socialLinks').innerHTML=Object.entries(state.config.socials||{}).filter(([k,url])=>SOCIAL_ICONS[k]&&validLink(url)).map(([k,url])=>`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" aria-label="${socialNames[k]}" title="${socialNames[k]}">${SOCIAL_ICONS[k]}</a>`).join('')}
+function renderLiveTicket(){ensureService();const ready=!!currentRoute&&checkout.destinationConfirmed&&!routeLoading;checkout.shipping=ready?shippingCost(checkout.distance):0;const html=`<div class="doc-counter"><label for="docQty">Documentos</label><input id="docQty" class="input" type="number" min="1" max="9999" step="1" value="${state.cart.documentos||1}"></div><div class="ticket-row"><span>Servicio de maniobras</span><strong>${money(serviceAmount())}</strong></div><div class="ticket-row"><span>Documentos (${state.cart.documentos||1})</span><strong>${money(docsAmount())}</strong></div><div class="ticket-row"><span>Papelería</span><strong>${money(materialsAmount())}</strong></div><div class="ticket-row"><span>Viaje${ready?' · '+checkout.distance.toFixed(2)+' km':''}</span><strong>${routeLoading?'Calculando…':ready?money(checkout.shipping):'Por calcular'}</strong></div><div class="ticket-row total"><span>Total</span><span>${ready?money(subtotal()+checkout.shipping):'Por calcular'}</span></div>`;document.getElementById('liveTicket').innerHTML=html;document.getElementById('docQty').onchange=e=>{const n=Math.floor(Number(e.target.value));if(n>=1&&n<=9999){state.cart.documentos=n;saveLocal();renderTicketTotals()}}}
+function renderTicketTotals(){renderLiveTicket();updateCartCount()}
+renderCatalog=function(){const svc=state.products.filter(x=>x.category==='Servicio'||x.id==='documentos');svc.forEach(x=>x._hidden=true);const all=state.products;state.products=all.filter(x=>!x._hidden);baseRenderCatalog();state.products=all;svc.forEach(x=>delete x._hidden);renderLiveTicket()};
+changeQty=function(id,delta){if(id==='servicio')return;if(id==='documentos'){state.cart.documentos=Math.max(1,Math.min(9999,(state.cart.documentos||1)+delta));saveLocal();renderLiveTicket();return}baseChangeQty(id,delta);renderLiveTicket()};
+function labeledPin(kind){return L.divIcon({className:'',html:`<div class="pin-label ${kind==='destination'?'destination':''}">${kind==='origin'?'Salida':'Entrega'}</div>`,iconSize:[80,34],iconAnchor:[40,34]})}
+function tileUrl(){const m=mapSettings();if(m.tileUrl){return m.tileUrl.replaceAll('{apiKey}',encodeURIComponent(m.apiKey||''))}const style=publicThemeMode==='dark'?'dark_all':m.style||'voyager';return `https://basemaps.cartocdn.com/rastertiles/${style}/{z}/{x}/{y}{r}.png${m.apiKey?'?api_key='+encodeURIComponent(m.apiKey):''}`}
+cartoTileUrl=tileUrl;
+mapConfigured=function(){return true};
+addConfiguredTileLayer=function(map){try{L.tileLayer(tileUrl(),{maxZoom:20,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attribution">CARTO</a>'}).addTo(map);return true}catch{return false}};
+function initPublicMap(){if(publicMap){publicMap.remove();publicMap=null}if(typeof L==='undefined'){document.getElementById('publicDeliveryMap').innerHTML='<div class="map-pick-help">No se pudo cargar el mapa. Revisa tu conexión y vuelve a intentar.</div>';return}const o=state.config.origin;publicMap=L.map('publicDeliveryMap').setView([o.lat,o.lng],13);addConfiguredTileLayer(publicMap);if(o.confirmed)publicOriginPin=L.marker([o.lat,o.lng],{icon:labeledPin('origin')}).addTo(publicMap).bindPopup('Salida del proveedor');publicDestPin=null;publicRoute=null;publicMap.on('click',e=>chooseDestination(e.latlng.lat,e.latlng.lng,checkout.address||'Punto designado en mapa'));if(checkout.destinationConfirmed){drawDestination();if(currentRoute?.geo)drawRoute(currentRoute.geo)}}
+function drawDestination(){if(!publicMap)return;const coords=[checkout.lat,checkout.lng];if(publicDestPin)publicDestPin.setLatLng(coords);else{publicDestPin=L.marker(coords,{draggable:true,icon:labeledPin('destination')}).addTo(publicMap);publicDestPin.on('dragend',e=>{const p=e.target.getLatLng();chooseDestination(p.lat,p.lng,checkout.address||'Punto designado en mapa')})}}
+function drawRoute(geo){if(!publicMap)return;if(publicRoute)publicMap.removeLayer(publicRoute);publicRoute=L.geoJSON(geo,{style:{color:'#176b6b',weight:5,opacity:.9}}).addTo(publicMap);publicMap.fitBounds(publicRoute.getBounds(),{padding:[35,35],maxZoom:16})}
+async function chooseDestination(lat,lng,label){checkout.lat=lat;checkout.lng=lng;checkout.address=label;checkout.destinationConfirmed=true;drawDestination();await computeClientRoute()}
+routeDistance=async function(aLat,aLng,bLat,bLng){const c=new AbortController(),timeout=setTimeout(()=>c.abort(),15000);try{const url=`https://router.project-osrm.org/route/v1/driving/${aLng},${aLat};${bLng},${bLat}?overview=full&geometries=geojson`;const r=await fetch(url,{signal:c.signal});if(!r.ok)throw Error('No se pudo calcular la ruta.');const data=await r.json();if(!data.routes?.length)throw Error('No se encontró una ruta transitable.');return {km:data.routes[0].distance/1000,minutes:data.routes[0].duration/60,geo:data.routes[0].geometry}}finally{clearTimeout(timeout)}};
+computeClientRoute=async function(){const serial=++routeSerial;currentRoute=null;routeLoading=true;renderLiveTicket();const info=document.getElementById('publicDistance');info.textContent='Calculando ruta por vialidades…';if(!state.config.origin.confirmed){routeLoading=false;info.textContent='El proveedor debe confirmar su origen para calcular el viaje.';renderLiveTicket();return}try{const o=state.config.origin,r=await routeDistance(o.lat,o.lng,checkout.lat,checkout.lng);if(serial!==routeSerial)return;checkout.distance=r.km;currentRoute=r;routeLoading=false;info.textContent=`Entrega: ${checkout.address} · ${r.km.toFixed(2)} km · ${Math.ceil(r.minutes)} min de recorrido estimado${state.config.shipping.roundTrip?' · tarifa de ida y vuelta':''}`;drawRoute(r.geo);renderLiveTicket()}catch(e){if(serial!==routeSerial)return;routeLoading=false;checkout.distance=0;info.textContent='No fue posible calcular el viaje. Ajusta el punto o vuelve a intentar.';renderLiveTicket();toast(e.message||'El servicio de rutas no respondió.','error')}};
+async function searchStreet(target='destination'){const id=target==='origin'?'originAddress':'streetSearch';const input=document.getElementById(id);const query=input?.value.trim();if(!query)return toast('Escribe calle, colonia y ciudad.','error');const serial=++searchSerial;const button=document.getElementById(target==='origin'?'geocodeOrigin':'findStreet');if(button)button.disabled=true;const box=document.getElementById(target==='origin'?'originSearchResults':'streetResults');if(box)box.textContent='Buscando calle…';try{const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);let r;try{r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=mx&q=${encodeURIComponent(query)}`,{signal:c.signal,headers:{'Accept-Language':'es'}})}finally{clearTimeout(timer)}if(!r.ok)throw Error('El buscador no respondió.');const data=await r.json();if(serial!==searchSerial)return;if(box){box.innerHTML=data.length?data.map((p,i)=>`<button class="btn ghost full" data-search-result="${i}">${esc(p.display_name)}</button>`).join(''):'No se encontró la calle. Puedes marcar el destino en el mapa.';box.querySelectorAll('button').forEach((b,i)=>b.onclick=()=>{const p=data[i];if(target==='origin'){setProviderOrigin(Number(p.lat),Number(p.lon),p.display_name);input.value=p.display_name;initOriginMap()}else{input.value=p.display_name;chooseDestination(Number(p.lat),Number(p.lon),p.display_name)}box.innerHTML=''})}}catch(e){if(box)box.textContent='No se pudo buscar. Marca el punto manualmente en el mapa.';toast(e.message,'error')}finally{if(button)button.disabled=false}}
+function setProviderOrigin(lat,lng,address){state.config.origin={lat,lng,address:address||'Punto de salida designado',confirmed:true};save();renderPublicOrigin();initPublicMap();if(checkout.destinationConfirmed)computeClientRoute()}
+function locateProvider(){if(!navigator.geolocation)return toast('Este dispositivo no permite obtener la ubicación.','error');const b=document.getElementById('locateProvider');if(b)b.disabled=true;navigator.geolocation.getCurrentPosition(p=>{setProviderOrigin(p.coords.latitude,p.coords.longitude,`Ubicación del proveedor (precisión ${Math.round(p.coords.accuracy)} m)`);if(b)b.disabled=false;initOriginMap();toast('Punto de salida actualizado.','ok')},()=>{if(b)b.disabled=false;toast('No fue posible obtener tu ubicación. Permite GPS o selecciona el punto manualmente.','error')},{enableHighAccuracy:true,timeout:15000,maximumAge:0})}
+initOriginMap=function(){if(!document.getElementById('originMap')||typeof L==='undefined')return;if(originMap)originMap.remove();const o=state.config.origin;originMap=L.map('originMap').setView([o.lat,o.lng],14);addConfiguredTileLayer(originMap);originMarker=L.marker([o.lat,o.lng],{draggable:true,icon:labeledPin('origin')}).addTo(originMap);const set=(ll)=>{setProviderOrigin(ll.lat,ll.lng,document.getElementById('originAddress')?.value||'Punto de salida designado');originMarker.setLatLng(ll)};originMap.on('click',e=>set(e.latlng));originMarker.on('dragend',e=>set(e.target.getLatLng()))};
+applyPublicTheme=function(){baseApplyTheme();if(publicMap){publicMap.eachLayer(layer=>{if(layer instanceof L.TileLayer)publicMap.removeLayer(layer)});addConfiguredTileLayer(publicMap)}};
+loadPublicCloudState=async function(){await baseLoadPublic();ensureService();renderPublicOrigin();initPublicMap();if(checkout.destinationConfirmed)await computeClientRoute()};
+openDrawer=function(){ensureService();document.getElementById('overlay').classList.add('show');document.getElementById('cartDrawer').classList.add('show');document.getElementById('cartDrawer').setAttribute('aria-hidden','false');renderCart()};
+closeDrawer=function(){document.getElementById('overlay').classList.remove('show');document.getElementById('cartDrawer').classList.remove('show');document.getElementById('cartDrawer').setAttribute('aria-hidden','true')};
+renderCart=function(){const body=document.getElementById('cartBody');const items=cartItems();body.innerHTML=`<div class="form-section"><h3>Maniobras y complementos</h3>${items.map(x=>`<div class="ticket-row"><span>${x.qty} × ${esc(x.p.name)}</span><strong>${money(x.qty*x.p.price)}</strong></div>`).join('')}<div class="field"><label for="documentsDetail">Descripción de los documentos / maniobras</label><textarea id="documentsDetail" class="textarea" placeholder="Ej. dos maniobras de importación para entrega a…">${esc(checkout.documents)}</textarea></div></div><div class="form-section"><h3>Punto de entrega</h3><div class="notice">${esc(checkout.address||'Selecciona el destino en el mapa de la página.')}<br>Número: ${esc(checkout.number||'Sin capturar')}<br>Referencias: ${esc(checkout.references||'Sin capturar')}</div><button id="editDestination" class="btn ghost full">${UI.map}<span>Editar ubicación y referencias</span></button></div><div class="form-section"><h3>Datos de contacto</h3><div class="field"><label for="customerName">Nombre de quien solicita</label><input id="customerName" class="input" autocomplete="name" value="${esc(checkout.name)}"></div><div class="field"><label for="customerPhone">Teléfono WhatsApp (10 dígitos)</label><input id="customerPhone" class="input" type="tel" maxlength="10" value="${esc(checkout.phone)}"></div><div class="field"><label for="callPhone">Teléfono de llamadas (opcional si es el mismo)</label><input id="callPhone" class="input" type="tel" maxlength="10" value="${esc(checkout.callPhone)}"></div><div class="field"><label for="customerNotes">Indicaciones adicionales</label><textarea id="customerNotes" class="textarea">${esc(checkout.notes)}</textarea></div></div><div class="form-section"><h3>Método de pago</h3>${state.config.payments.map(p=>`<div class="payment-item"><label class="row"><input type="radio" name="payment" value="${esc(p.id)}" ${checkout.paymentId===p.id?'checked':''}><strong>${esc(p.title)}</strong></label><div class="payment-data">${esc(p.data)}</div><button class="btn ghost" data-copy="${esc(p.data)}" data-copy-id="${p.id}">${UI.copy}<span>Copiar datos</span></button><div id="copy_${esc(p.id)}" class="copy-note">Copiado</div></div>`).join('')}</div><div class="form-section"><h3>Comprobante de pago</h3><label class="btn secondary full" for="proofFile">${UI.attach}<span>Adjuntar imagen o PDF</span></label><input class="hidden" id="proofFile" type="file" accept="image/png,image/jpeg,application/pdf"><div id="proofPreview" class="preview-file ${checkout.proofFile?'show':''}">${proofPreviewHtml()}</div><div class="small muted" style="margin-top:10px">Se enviará a revisión; adjuntar una captura no confirma el pago.</div></div>`;
+ document.getElementById('cartFoot').innerHTML=`<div class="total-line"><span>Maniobras y papelería</span><strong>${money(subtotal())}</strong></div><div class="total-line"><span>Viaje</span><strong>${currentRoute?money(checkout.shipping):'Por calcular'}</strong></div><div class="total-line grand"><span>Total</span><span>${currentRoute?money(subtotal()+checkout.shipping):'Por calcular'}</span></div><button class="btn full" id="reviewOrder">${UI.orders}<span>Revisar orden</span></button>`;
+ const fields={customerName:'name',customerPhone:'phone',callPhone:'callPhone',customerNotes:'notes',documentsDetail:'documents'};Object.entries(fields).forEach(([id,key])=>document.getElementById(id).oninput=e=>{checkout[key]=key==='phone'||key==='callPhone'?e.target.value.replace(/\D/g,'').slice(0,10):e.target.value});document.querySelectorAll('input[name=payment]').forEach(r=>r.onchange=e=>checkout.paymentId=e.target.value);document.getElementById('proofFile').onchange=e=>{const f=e.target.files[0];if(!f)return;if(!['image/png','image/jpeg','application/pdf'].includes(f.type)||f.size>10*1024*1024){e.target.value='';toast('Usa PNG, JPG o PDF de hasta 10 MB.','error');return}handleProof(e)};document.getElementById('reviewOrder').onclick=reviewOrder;document.getElementById('editDestination').onclick=()=>{closeDrawer();document.getElementById('deliveryWorkspace').scrollIntoView({behavior:'smooth'})}}
+validateCheckout=function(){if(!state.config.deliveryEnabled)return 'El servicio de entrega está temporalmente desactivado.';if(!state.config.origin.confirmed)return 'El proveedor debe confirmar su ubicación de salida.';if(!checkout.destinationConfirmed||!currentRoute||routeLoading)return 'Selecciona un destino y espera el cálculo de la ruta.';if(!checkout.number.trim())return 'Captura el número de vivienda o sitio; usa S/N si no tiene número.';if(!checkout.references.trim())return 'Captura una referencia para localizar la entrega.';if(!checkout.name.trim())return 'Escribe tu nombre.';if(!/^\d{10}$/.test(checkout.phone))return 'El WhatsApp debe tener 10 dígitos.';if(checkout.callPhone&&!/^\d{10}$/.test(checkout.callPhone))return 'El teléfono de llamadas debe tener 10 dígitos.';if(!checkout.documents.trim())return 'Describe los documentos que se entregarán.';if(!checkout.paymentId)return 'Selecciona un método de pago.';if(!checkout.proofFile)return 'Adjunta tu comprobante de pago.';if(!/^\d{10,15}$/.test(state.config.whatsapp))return 'El proveedor debe configurar su número de WhatsApp.';return ''};
+function makeLocalOrder(){return {id:uid('o'),folio:nextFolio(),date:new Date().toISOString(),dateText:new Date().toLocaleString('es-MX'),customer:{name:checkout.name,phone:checkout.phone,callPhone:checkout.callPhone||checkout.phone,notes:checkout.notes,documents:checkout.documents},items:cartItems().map(x=>({id:x.p.id,name:x.p.name,qty:x.qty,price:x.p.price,total:x.qty*x.p.price})),subtotal:subtotal(),shipping:shippingCost(checkout.distance),total:Math.round((subtotal()+shippingCost(checkout.distance))*100)/100,paymentId:checkout.paymentId,paymentTitle:state.config.payments.find(p=>p.id===checkout.paymentId)?.title||'',paymentStatus:'WAITING_PAYMENT',origin:deepClone(state.config.origin),delivery:{type:'delivery',label:'Entrega de maniobras',address:checkout.address,number:checkout.number,references:checkout.references,lat:checkout.lat,lng:checkout.lng,km:checkout.distance},status:'pendiente'}}
+function fullAddress(o){return `${o.delivery.address} · Número: ${o.delivery.number||''} · Referencias: ${o.delivery.references||''}`}
+function orderTicketHtml(o){return `<div class="notice"><strong>${esc(o.folio)}</strong> · ${esc(o.dateText)}<br>${esc(o.customer.name)} · WhatsApp: ${esc(o.customer.phone)}<br>Llamadas: ${esc(o.customer.callPhone||o.customer.phone)}</div><div class="table-wrap"><table class="summary-table"><thead><tr><th>Concepto</th><th>Cantidad</th><th>Unitario</th><th>Importe</th></tr></thead><tbody>${o.items.map(i=>`<tr><td>${esc(i.name)}</td><td>${i.qty}</td><td>${money(i.price)}</td><td>${money(i.total)}</td></tr>`).join('')}</tbody></table></div><div class="ticket-row"><span>Viaje (${o.delivery.km.toFixed(2)} km)</span><strong>${money(o.shipping)}</strong></div><div class="ticket-row total"><span>Total</span><span>${money(o.total)}</span></div><div class="small"><p><strong>Documentos:</strong> ${esc(o.customer.documents||'')}</p><p><strong>Salida:</strong> ${esc(o.origin?.address||'')}</p><p><strong>Entrega:</strong> ${esc(fullAddress(o))}</p><p><strong>Notas:</strong> ${esc(o.customer.notes||'Sin notas')}</p><p><strong>Pago:</strong> ${esc(o.paymentTitle)} · ${esc(PAYMENT_LABELS[o.paymentStatus]||'Pendiente')}</p></div>`}
+renderSummary=function(){const o=makeLocalOrder();document.getElementById('summaryBody').innerHTML=orderTicketHtml(o)+`<div class="toolbar"><button id="editOrder" class="btn ghost">${UI.edit}<span>Editar</span></button><button id="confirmOrder" class="btn success">${UI.whatsapp}<span>Generar orden y enviar a WhatsApp</span></button></div>`;document.getElementById('editOrder').onclick=()=>{closeModal('summaryModal');openDrawer()};document.getElementById('confirmOrder').onclick=confirmOrder};
+whatsappText=function(o){return [`ENTREGA DE MANIOBRAS #${o.publicId||o.folio}`,`Fecha: ${o.dateText}`,`Cliente: ${o.customer.name}`,`WhatsApp: ${o.customer.phone}`,`Llamadas: ${o.customer.callPhone||o.customer.phone}`,`Documentos: ${o.customer.documents||''}`,'DETALLE:',...o.items.map(i=>`${i.qty} x ${i.name}: ${money(i.price)} c/u = ${money(i.total)}`),`Salida: ${o.origin?.address||state.config.origin.address}`,`Entrega: ${fullAddress(o)}`,`Ubicación de entrega: https://www.google.com/maps?q=${o.delivery.lat},${o.delivery.lng}`,`Distancia de ida: ${o.delivery.km.toFixed(2)} km`,`Maniobras y papelería: ${money(o.subtotal)}`,`Costo de viaje: ${money(o.shipping)}`,`TOTAL: ${money(o.total)}`,`Banca / método: ${o.paymentTitle}`,`Estado de pago: ${PAYMENT_LABELS[o.paymentStatus]||'Pendiente de revisión'}`,`Indicaciones: ${o.customer.notes||'Sin notas'}`,'El comprobante se adjunta por separado al chat.'].join('\n')};
+buildPdf=async function(o){if(!window.jspdf)throw Error('No se pudo cargar la librería PDF.');const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',format:'a4'});doc.setFont('helvetica','bold');doc.setFontSize(18);doc.text(state.config.businessName,14,18);doc.setFont('helvetica','normal');doc.setFontSize(10);doc.text(`Orden ${o.publicId||o.folio} | ${o.dateText}`,14,26);doc.autoTable({startY:33,head:[['Concepto','Cantidad','Unitario','Importe']],body:[...o.items.map(i=>[i.name,''+i.qty,money(i.price),money(i.total)]),['Viaje ('+o.delivery.km.toFixed(2)+' km)','1',money(o.shipping),money(o.shipping)],['TOTAL','','',money(o.total)]],styles:{fontSize:10},headStyles:{fillColor:[23,107,107]},theme:'grid'});let y=doc.lastAutoTable.finalY+9;const paragraphs=[`Cliente: ${o.customer.name}`,`WhatsApp: ${o.customer.phone} | Llamadas: ${o.customer.callPhone||o.customer.phone}`,`Documentos: ${o.customer.documents||''}`,`Salida: ${o.origin?.address||state.config.origin.address}`,`Entrega: ${fullAddress(o)}`,`Coordenadas entrega: ${o.delivery.lat}, ${o.delivery.lng}`,`Indicaciones: ${o.customer.notes||'Sin notas'}`,`Metodo de pago: ${o.paymentTitle}`,`Estado del pago: ${PAYMENT_LABELS[o.paymentStatus]||'Pendiente de revision'}`];for(const p of paragraphs){const lines=doc.splitTextToSize(p,180);for(const line of lines){if(y>278){doc.addPage();y=18}doc.text(line,14,y);y+=5}y+=3}return doc.output('blob')};
+confirmOrder=async function(){if(orderBusy)return;const err=validateCheckout();if(err)return toast(err,'error');orderBusy=true;const b=document.getElementById('confirmOrder');if(b)b.disabled=true;const wa=window.open('about:blank','_blank');if(wa){wa.opener=null;wa.document.body.textContent='Generando tu orden de maniobras…'}let o=makeLocalOrder();try{if(supabaseConfigured()){if(!supabaseClient||!cloudReady)throw Error('No hay conexión con el sistema de órdenes. Intenta nuevamente.');const notes=`Documentos: ${checkout.documents}\nLlamadas: ${checkout.callPhone||checkout.phone}\nSalida: ${state.config.origin.address}\n${checkout.notes}`;const {data,error}=await supabaseClient.rpc('submit_order',{p_customer:{name:checkout.name,phone:checkout.phone,notes},p_delivery:{type:'delivery',address:fullAddress(o),lat:checkout.lat,lng:checkout.lng,distance_km:checkout.distance},p_payment_title:o.paymentTitle,p_items:o.items.map(i=>({id:i.id,qty:i.qty}))});if(error)throw error;const server=cloudOrderToState(data);o={...o,id:server.id,folio:server.folio,publicId:server.publicId,items:server.items,subtotal:server.subtotal,shipping:server.shipping,total:server.total,paymentStatus:server.paymentStatus};const receipt=await uploadReceiptForOrder(o);if(receipt.ok)o.paymentStatus='PENDING_REVIEW';else toast('Orden registrada. El comprobante debe enviarse por WhatsApp porque no se pudo cargar.','error')}
+state.orders.unshift(o);state.folioSeq++;lastOrderId=o.id;lastManiobraOrder=o;state.cart={servicio:1,documentos:1};saveLocal();lastPdfName=`maniobras-${o.folio}.pdf`;try{lastPdfBlob=await buildPdf(o)}catch(e){lastPdfBlob=null;toast(e.message,'error')}renderCatalog();renderPostConfirm(o);const url=`https://wa.me/${state.config.whatsapp}?text=${encodeURIComponent(whatsappText(o))}`;if(wa)wa.location.replace(url);else toast('Tu orden está lista. Pulsa Abrir WhatsApp para enviarla.','ok')
+}catch(e){if(wa)wa.close();toast(e.message||'No fue posible crear la orden.','error');if(b)b.disabled=false}finally{orderBusy=false}};
+renderPostConfirm=function(o){document.getElementById('summaryBody').innerHTML=`<div class="notice"><strong>Orden generada</strong><br>${supabaseConfigured()?'Registrada para revisión de pago.':'Guardada en este dispositivo. El pago queda pendiente de revisión.'}</div>${orderTicketHtml(o)}<div class="toolbar"><button id="downloadPdf" class="btn secondary" ${lastPdfBlob?'':'disabled'}>${UI.download}<span>Descargar ticket PDF</span></button><button id="payWhatsapp" class="btn success">${UI.whatsapp}<span>Abrir WhatsApp</span></button></div><div class="notice">WhatsApp abrirá el texto de la orden. Adjunta el comprobante y el ticket PDF en el chat si los necesitas.</div>`;document.getElementById('downloadPdf').onclick=downloadLastPdf;document.getElementById('payWhatsapp').onclick=()=>window.open(`https://wa.me/${state.config.whatsapp}?text=${encodeURIComponent(whatsappText(o))}`,'_blank','noopener');};
+// Keep cloud notes/address intact; structured local delivery fields remain in the saved ticket.
+cloudOrderToState=function(o){const parsed=baseCloudOrder(o);const local=state.orders.find(x=>x.id===parsed.id);return local?{...local,...parsed,customer:{...local.customer,...parsed.customer},origin:local.origin,delivery:{...local.delivery,...parsed.delivery,address:local.delivery.address}}:parsed};
+const baseSaveProduct=saveProductForm;
+saveProductForm=function(){const n=Number(document.getElementById('apPrice')?.value),stock=Number(document.getElementById('apStock')?.value);if(!Number.isFinite(n)||n<0||!Number.isFinite(stock)||stock<0)return toast('Precio y existencia deben ser números válidos.','error');if(editingProductId==='servicio'||editingProductId==='documentos'){document.getElementById('apActive').checked=true;document.getElementById('apCategory').value=editingProductId==='servicio'?'Servicio':'Documentos'}baseSaveProduct();ensureService();renderLiveTicket()};
+const baseBindProducts=bindProductAdmin;
+bindProductAdmin=function(){baseBindProducts();document.querySelectorAll('[data-delete-product="servicio"],[data-delete-product="documentos"]').forEach(b=>{b.disabled=true;b.title='Este concepto forma parte del servicio'})};
+const baseOpenAdmin=openAdmin;
+openAdmin=function(){if(!supabaseConfigured()){activeAdmin='business';renderAdmin();openModal('adminModal');return}baseOpenAdmin()};
+const baseSave=save;
+save=function(){equivalentShippingRate();baseSave()};
+renderBusinessAdmin=function(c){baseBusinessAdmin(c);if(!supabaseConfigured()){const security=document.getElementById('changePassword')?.closest('.section-card');if(security)security.innerHTML='<h3>Configuración local</h3><div class="notice">Esta edición se guarda únicamente en este navegador. Para compartir origen, precios y órdenes con tus clientes, configura Supabase en las constantes del archivo y usa tu acceso administrativo.</div>';const connection=document.getElementById('retrySupabase')?.closest('.section-card');if(connection)connection.innerHTML='<h3>Conexión para producción</h3><p class="small">En el código, completa SUPABASE_URL y SUPABASE_ANON_KEY con un proyecto exclusivo para este sitio. Reutiliza la estructura del catálogo original y las funciones receipt-upload, telegram-webhook y telegram-admin.</p>'}
+ const carto=document.getElementById('saveMapConfig')?.closest('.section-card');if(carto){carto.querySelector('.notice').textContent='Mapa base CARTO. Puedes añadir tu clave pública y, si tu cuenta usa una URL de tiles específica, pegarla aquí. El buscador de calles usa Nominatim y las rutas usan OSRM.';carto.insertAdjacentHTML('beforeend',`<div class="field" style="margin-top:12px"><label>URL de tiles personalizada (opcional)</label><input class="input" id="cartoCustomUrl" value="${esc(state.config.map.tileUrl||'')}" placeholder="https://…/{z}/{x}/{y}.png?api_key={apiKey}"></div>`);document.getElementById('saveMapConfig').onclick=()=>{const tile=document.getElementById('cartoCustomUrl').value.trim();if(tile&&!/^https:\/\//.test(tile))return toast('La URL de tiles debe usar HTTPS.','error');state.config.map={provider:'carto',apiKey:document.getElementById('cartoApiKey').value.trim(),style:document.getElementById('cartoStyle').value,tileUrl:tile};save();initPublicMap();initOriginMap();toast('Mapa actualizado.','ok')}}
+ const origin=document.getElementById('originMap')?.closest('.section-card');origin?.insertAdjacentHTML('afterbegin',`<div class="toolbar"><button class="btn secondary" id="locateProvider">${FOOD.location}<span>Usar mi ubicación como salida</span></button></div>`);document.getElementById('locateProvider').onclick=locateProvider;document.getElementById('geocodeOrigin').onclick=()=>searchStreet('origin');document.getElementById('geocodeOrigin').insertAdjacentHTML('afterend','<div id="originSearchResults" class="stack"></div>');origin?.insertAdjacentHTML('beforeend',`<div class="admin-grid two" style="margin-top:12px"><div class="field"><label>Latitud</label><input id="providerLat" class="input" type="number" step="0.000001" value="${state.config.origin.lat}"></div><div class="field"><label>Longitud</label><input id="providerLng" class="input" type="number" step="0.000001" value="${state.config.origin.lng}"></div></div><button id="saveProviderCoords" class="btn">${UI.save}<span>Confirmar punto de salida</span></button>`);document.getElementById('saveProviderCoords').onclick=()=>{const lat=Number(document.getElementById('providerLat').value),lng=Number(document.getElementById('providerLng').value);if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)return toast('Coordenadas inválidas.','error');setProviderOrigin(lat,lng,document.getElementById('originAddress').value);initOriginMap();toast('Origen confirmado.','ok')};
+ c.insertAdjacentHTML('beforeend',`<div class="section-card"><h3>Precio de maniobras</h3><div class="admin-grid two"><div class="field"><label>Costo fijo por solicitud</label><input class="input" id="fixedServicePrice" type="number" min="0" step=".01" value="${serviceAmount()}"></div><div class="field"><label>Costo adicional por documento</label><input class="input" id="perDocumentPrice" type="number" min="0" step=".01" value="${state.products.find(x=>x.id==='documentos')?.price||0}"></div></div><button id="saveServicePrices" class="btn">${UI.save}<span>Guardar precios</span></button></div><div class="section-card"><h3>Redes sociales</h3><div class="admin-grid two">${Object.keys(socialNames).map(k=>`<div class="field"><label>${socialNames[k]}</label><input class="input" data-social="${k}" type="url" placeholder="https://…" value="${esc(state.config.socials?.[k]||'')}"></div>`).join('')}</div><button id="saveSocials" class="btn">${UI.save}<span>Guardar enlaces</span></button><p class="small muted">Solo aparecen los iconos de las redes con enlaces configurados.</p></div>`);
+ document.getElementById('saveServicePrices').onclick=()=>{const fixed=Number(document.getElementById('fixedServicePrice').value),per=Number(document.getElementById('perDocumentPrice').value);if(!Number.isFinite(fixed)||!Number.isFinite(per)||fixed<0||per<0)return toast('Captura precios válidos.','error');state.products.find(p=>p.id==='servicio').price=fixed;state.products.find(p=>p.id==='documentos').price=per;save();renderLiveTicket();toast('Precios actualizados.','ok')};document.getElementById('saveSocials').onclick=()=>{const values={};for(const el of document.querySelectorAll('[data-social]')){const url=el.value.trim();if(url&&!validLink(url))return toast('Revisa el enlace de '+socialNames[el.dataset.social]+'.','error');values[el.dataset.social]=url}state.config.socials=values;save();renderSocials();toast('Enlaces actualizados.','ok')}
+};
+const baseTripAdmin=renderTripAdmin;
+renderTripAdmin=function(c){baseTripAdmin(c);const t=state.config.tripPricing;document.getElementById('shipPerKm').value=t.perKm;document.getElementById('shipFree')?.closest('.field').remove();document.getElementById('shipMargin').closest('.section-card').insertAdjacentHTML('beforeend',`<label class="row"><input id="includeFuel" type="checkbox" ${t.includeFuel?'checked':''}><span>Incluir combustible en el costo de viaje</span></label><div class="notice" style="margin-top:12px">Viaje = (base + km facturables × tarifa/km + combustible) × margen, con redondeo. El costo fijo de maniobras y la papelería se suman por separado. La ida y vuelta duplica los km facturables.</div>`);document.getElementById('includeFuel').onchange=recalcTrip;document.getElementById('useRate').onclick=()=>{const s=state.config.shipping;const vals=['shipBase','shipPerKm','shipMargin','shipRound'].map(id=>Number(document.getElementById(id).value));if(vals.some(v=>!Number.isFinite(v)||v<0))return toast('Las tarifas deben ser números no negativos.','error');const efficiency=Number(document.querySelector(`[data-eff="${s.vehicle}"]`).value);if(s.vehicle!=='bike'&&efficiency<=0)return toast('El rendimiento debe ser mayor a cero.','error');[s.base,state.config.tripPricing.perKm,s.margin,s.rounding]=vals;state.config.tripPricing.includeFuel=document.getElementById('includeFuel').checked;s.roundTrip=document.getElementById('roundTrip').checked;save();renderLiveTicket();if(checkout.destinationConfirmed)computeClientRoute();toast('Tarifa de viaje guardada.','ok')};recalcTrip()};
+recalcTrip=function(){if(!document.getElementById('resKm'))return;const s=state.config.shipping,t=state.config.tripPricing,temporary=deepClone({s,t});s.base=Number(document.getElementById('shipBase').value)||0;s.margin=Number(document.getElementById('shipMargin').value)||0;s.rounding=Number(document.getElementById('shipRound').value)||0;s.roundTrip=document.getElementById('roundTrip').checked;t.perKm=Number(document.getElementById('shipPerKm').value)||0;t.includeFuel=document.getElementById('includeFuel')?.checked??t.includeFuel;const r=getTripCost(tripKm);document.getElementById('resKm').textContent=r.distance.toFixed(2)+' km';document.getElementById('resLiters').textContent=r.liters.toFixed(2)+' l';document.getElementById('resFuel').textContent=money(r.fuel);document.getElementById('resSuggested').textContent=money(r.total);Object.assign(s,temporary.s);Object.assign(t,temporary.t)};
+setTripDestination=async function(lat,lng){if(!tripMap)return;if(tripDestMarker)tripDestMarker.setLatLng([lat,lng]);else tripDestMarker=L.marker([lat,lng],{draggable:true}).addTo(tripMap);tripDestMarker.off('dragend');tripDestMarker.on('dragend',e=>{const p=e.target.getLatLng();setTripDestination(p.lat,p.lng)});try{const o=state.config.origin,res=await routeDistance(o.lat,o.lng,lat,lng);tripKm=res.km;if(tripRouteLayer)tripMap.removeLayer(tripRouteLayer);tripRouteLayer=L.geoJSON(res.geo,{style:{color:'#176b6b',weight:5}}).addTo(tripMap);tripMap.fitBounds(tripRouteLayer.getBounds(),{padding:[20,20]});recalcTrip()}catch(e){toast('No se pudo calcular esa ruta.','error')}};
+// Do not infer a paid state or call an undocumented payment-status action.
+const finalPostConfirm=renderPostConfirm;
+renderPostConfirm=function(o){finalPostConfirm(o);document.getElementById('refreshPayment')?.remove()};
+const baseInitSupabase=initSupabase;
+initSupabase=async function(){if(!supabaseConfigured()){setSupabaseStatus('warn','Configuración local. Falta conectar Supabase para compartir cambios y activar Telegram.');return}await baseInitSupabase()};
+categories=function(){return ['Todos',...new Set(state.products.filter(p=>p.active&&p.id!=='servicio'&&p.id!=='documentos').map(p=>p.category).filter(Boolean))]};
+const baseInitTripMap=initTripMap;
+initTripMap=function(){tripDestMarker=null;tripOriginMarker=null;tripRouteLayer=null;tripKm=0;baseInitTripMap()};
+const originalBindProductAdmin=bindProductAdmin;
+bindProductAdmin=function(){originalBindProductAdmin();document.querySelectorAll('[data-icon-pack]').forEach(b=>b.onclick=()=>{const ids=['apName','apDesc','apCategory','apPrice','apStock','apImageData'];const values=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)?.value]));const active=document.getElementById('apActive')?.checked;const chosen=document.querySelector('.icon-option.selected')?.dataset.icon;activeFoodPack=b.dataset.iconPack;renderProductsAdmin(document.getElementById('adminContent'));document.getElementById('productFormWrap').style.display='block';ids.forEach(id=>{if(values[id]!==undefined)document.getElementById(id).value=values[id]});document.getElementById('apActive').checked=active;const selected=document.querySelector(`[data-icon="${chosen}"]`);if(selected){document.querySelectorAll('.icon-option').forEach(x=>x.classList.remove('selected'));selected.classList.add('selected')}})};
+ensureService();equivalentShippingRate();
+document.getElementById('findStreet').onclick=()=>searchStreet();
+document.getElementById('streetSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchStreet()}});
+document.getElementById('siteNumber').oninput=e=>checkout.number=e.target.value;
+document.getElementById('deliveryReference').oninput=e=>checkout.references=e.target.value;
+document.getElementById('continueDelivery').onclick=openDrawer;
+document.getElementById('reviewDelivery').onclick=openDrawer;
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDrawer();document.querySelectorAll('.modal.show').forEach(m=>closeModal(m.id))}});
+setTimeout(initPublicMap,0);
+
+/* ==============================
+   EVENTS & INIT
+============================== */
+document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.cat){currentCategory=b.dataset.cat;renderCategories();renderCatalog()}if(b.dataset.inc)changeQty(b.dataset.inc,1);if(b.dataset.dec)changeQty(b.dataset.dec,-1);if(b.dataset.remove){delete state.cart[b.dataset.remove];save();renderCart();renderCatalog()}if(b.dataset.closeDrawer!==undefined)closeDrawer();if(b.dataset.closeModal)closeModal(b.dataset.closeModal);if(b.dataset.copy){navigator.clipboard.writeText(b.dataset.copy).then(()=>{const n=document.getElementById('copy_'+b.dataset.copyId);n?.classList.add('show');setTimeout(()=>n?.classList.remove('show'),1600)}).catch(()=>toast('No se pudo copiar.','error'))}if(b.dataset.tab)renderAdminPane(b.dataset.tab)});
+document.getElementById('searchInput').addEventListener('input',e=>{searchTerm=e.target.value;renderCatalog()});document.getElementById('cartBtn').onclick=openDrawer;document.getElementById('themeBtn').onclick=togglePublicTheme;document.getElementById('adminBtn').onclick=openAdmin;document.getElementById('pinSubmit').onclick=checkPin;document.getElementById('adminEmailInput').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('adminPasswordInput').focus()});document.getElementById('adminPasswordInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkPin()});document.getElementById('overlay').onclick=()=>{closeDrawer();document.querySelectorAll('.modal.show').forEach(m=>closeModal(m.id))};document.getElementById('whatsappFab').onclick=()=>window.open(`https://wa.me/${state.config.whatsapp}?text=${encodeURIComponent(`Hola, quiero información de ${state.config.businessName}.`)}`,'_blank');
+applyDesign();renderHeader();renderCategories();renderCatalog();initSupabase().catch(e=>{console.error('Supabase init:',e);toast(explainSupabaseError(e),'error')});
+</script>
+</body>
+</html>
