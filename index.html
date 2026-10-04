@@ -362,8 +362,8 @@ function foodIconKeys(){
    Nunca uses service_role dentro de este archivo.
 ============================== */
 const CONNECTION_CONFIG=JSON.parse(document.getElementById('siteConnection').textContent);
-const SUPABASE_URL=String(CONNECTION_CONFIG.SUPABASE_URL||'');
-const SUPABASE_ANON_KEY=String(CONNECTION_CONFIG.SUPABASE_ANON_KEY||'');
+const SUPABASE_URL='https://rtskwikdauqqatruwddp.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0c2t3aWtkYXVxcWF0cnV3ZGRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5NTQ5MjIsImV4cCI6MjEwNjUzMDkyMn0.c6ynOA-HMpJTrQ8wRadYfy44pHDhmcwfvLH5jUh9hko';
 let supabaseClient=null,adminSession=null,cloudSyncTimer=null,cloudReady=false,supabaseConnectionState='idle',supabaseLastError='';
 function supabaseConfigured(){
   return /^https:\/\/.+\.supabase\.co$/i.test(SUPABASE_URL)
