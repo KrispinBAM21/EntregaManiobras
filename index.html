@@ -24,7 +24,7 @@
    de Telegram ni una clave service_role en este archivo.
 -->
 <head>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-Zx/6bdQFqpIkf7s7bvRTm/ckPHPC6dz946XbyWgVjkM=' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src https: wss: blob:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-TKrRantoHTCO07y0Yu94euG2pcOOyGuXIrBGpgMr6ME=' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src https: wss: blob:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Entrega de Maniobras</title>
@@ -1665,11 +1665,43 @@ renderBusinessAdmin=function(c){
    const result=staffAccess.owner?await supabaseClient.from('products').upsert(rows,{onConflict:'id'}):await supabaseClient.rpc('maniobras_save_module',{p_module:'business',p_config:{},p_products:rows});
    if(result.error)throw result.error;
    ids.forEach((id,i)=>state.products.find(p=>p.id===id).price=prices[i]);saveLocal();renderLiveTicket();
-   toast('Precios guardados en Supabase. El traslado se configura en Viajes.','ok');
+   toast('Precios guardados en Supabase. Con costo fijo 0, maniobra y traslado son gratuitos.','ok');
   }catch(e){toast('No se guardaron los precios: '+explainSupabaseError(e),'error')}
   finally{button.disabled=false}
  };
 };
+// Persistent checkout and a server-reserved reference before opening the bank app.
+const CHECKOUT_DRAFT='maniobrasCheckoutDraft_v2';
+let paymentDraftToken=crypto.randomUUID(),paymentDraftReference='',paymentDraftBank='',referenceBusy=null,draftLoaded=false,draftDbPromise=null;
+function checkoutDraftDb(){return draftDbPromise||(draftDbPromise=new Promise((resolve,reject)=>{const request=indexedDB.open('maniobras-checkout',1);request.onupgradeneeded=()=>request.result.createObjectStore('draft');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)}))}
+async function persistCheckoutFiles(){if(!draftFilesRestored)return;try{const db=await checkoutDraftDb();const tx=db.transaction('draft','readwrite');tx.objectStore('draft').put({groups:documentGroups,proof:checkout.proofFile,request:documentRequestId},'files')}catch(e){console.warn('No se pudo conservar el archivo del borrador')}}
+function persistCheckoutDraft(){try{const safe={...checkout};delete safe.proofFile;delete safe.proofUrl;localStorage.setItem(CHECKOUT_DRAFT,JSON.stringify({checkout:safe,cart:state.cart,extraStop,extraFirst,collectionMethod,route:currentRoute,origin:{lat:state.config.origin.lat,lng:state.config.origin.lng},token:paymentDraftToken,reference:paymentDraftReference,bank:paymentDraftBank}));saveLocal()}catch(e){console.warn('No se pudo conservar el borrador')}}
+try{const draft=JSON.parse(localStorage.getItem(CHECKOUT_DRAFT)||'null');if(draft&&draft.checkout){checkout={...checkout,...draft.checkout,proofFile:null,proofUrl:''};state.cart=draft.cart||state.cart;extraStop=draft.extraStop||null;extraFirst=draft.extraFirst!==false;collectionMethod=draft.collectionMethod||collectionMethod;paymentDraftToken=draft.token||paymentDraftToken;paymentDraftReference=draft.reference||'';paymentDraftBank=draft.bank||'';currentRoute=draft.route||null;draftLoaded=true}}catch{}
+let draftFilesRestored=!draftLoaded;
+async function restoreCheckoutFiles(){if(!draftLoaded)return;try{const db=await checkoutDraftDb();const request=db.transaction('draft').objectStore('draft').get('files');request.onsuccess=()=>{const data=request.result;draftFilesRestored=true;if(!data)return;documentGroups=data.groups||[];documentRequestId=data.request||documentRequestId;checkout.proofFile=data.proof||null;syncDocumentQuantity();renderDocumentPanels()};request.onerror=()=>{draftFilesRestored=true}}catch{draftFilesRestored=true}}
+restoreCheckoutFiles();
+document.addEventListener('input',()=>persistCheckoutDraft());document.addEventListener('change',()=>{persistCheckoutDraft();persistCheckoutFiles()});
+window.addEventListener('pagehide',()=>persistCheckoutDraft());document.addEventListener('visibilitychange',()=>{if(document.hidden){persistCheckoutDraft();persistCheckoutFiles()}});
+const retainedDocsPanel=renderDocumentPanels;renderDocumentPanels=function(){retainedDocsPanel();persistCheckoutDraft();persistCheckoutFiles()};
+const retainedRoute=computeClientRoute;computeClientRoute=async function(){await retainedRoute();persistCheckoutDraft()};
+function referencePanel(){const box=document.getElementById('checkoutPaymentReference');if(!box)return;const ready=paymentDraftBank===checkout.paymentId&&paymentDraftReference;box.innerHTML=ready?`<h4>Referencia para tu transferencia</h4><input class="input" readonly aria-label="Referencia de pago" value="${esc(paymentDraftReference)}"><button class="btn secondary" data-payment-copy="${esc(paymentDraftReference)}">${UI.copy}<span>Copiar referencia</span></button><p class="small">Utiliza este número en Referencia al transferir. Se conservará al generar la orden. Completa y confirma tu pedido al regresar.</p>`:`<p class="small">${referenceBusy?'Preparando tu referencia…':state.config.paymentReferenceEnabled===false?'La referencia opcional está desactivada.':'Selecciona un banco para obtener la referencia antes de transferir.'}</p>`;bindPaymentCopies(box)}
+async function ensurePaymentReference(){
+ if(state.config.paymentReferenceEnabled===false||!checkout.paymentId)return;
+ if(paymentDraftReference&&paymentDraftBank===checkout.paymentId){referencePanel();return}
+ if(referenceBusy){await referenceBusy;if(paymentDraftBank!==checkout.paymentId)return ensurePaymentReference();return}
+ const bank=checkout.paymentId;
+ referenceBusy=(async()=>{if(!supabaseClient)throw Error('Espera a que conecte Supabase.');const {data,error}=await supabaseClient.rpc('maniobras_reserve_payment',{p_token:paymentDraftToken,p_bank:bank});if(error)throw error;paymentDraftReference=data?.reference||'';paymentDraftBank=bank;persistCheckoutDraft()})();referencePanel();
+ try{await referenceBusy}catch(e){toast('No se pudo preparar la referencia: '+explainSupabaseError(e),'error');throw e}finally{referenceBusy=null;referencePanel()}
+}
+const referenceCart=renderCart;renderCart=function(){referenceCart();const body=document.getElementById('cartBody');const methods=[...body.querySelectorAll('h3')].find(h=>h.textContent==='Método de pago');if(methods){const old=methods.nextElementSibling;if(old?.tagName==='P')old.remove();methods.insertAdjacentHTML('afterend','<div id="checkoutPaymentReference" class="notice" role="status" style="margin:12px 0"></div>');referencePanel();body.querySelectorAll('input[name=payment]').forEach(input=>input.addEventListener('change',()=>{persistCheckoutDraft();ensurePaymentReference().catch(()=>{})}));if(checkout.paymentId)ensurePaymentReference().catch(()=>{})}};
+const referenceSubmit=submitCustomerOrder;submitCustomerOrder=async function(payload){await ensurePaymentReference();if(paymentDraftReference)payload={...payload,p_customer:{...payload.p_customer,notes:'Pago-ID: '+paymentDraftToken+'\n'+(payload.p_customer.notes||'')}};return referenceSubmit(payload)};
+const completedDraft=renderPostConfirm;renderPostConfirm=function(o){completedDraft(o);documentGroups=[];checkout.proofFile=null;localStorage.removeItem(CHECKOUT_DRAFT);paymentDraftToken=crypto.randomUUID();paymentDraftReference='';paymentDraftBank='';checkoutDraftDb().then(db=>db.transaction('draft','readwrite').objectStore('draft').delete('files')).catch(()=>{})};
+const refreshedDraft=loadPublicCloudState;loadPublicCloudState=async function(){await refreshedDraft();if(draftLoaded){for(const [id,key] of [['siteNumber','number'],['deliveryReference','references'],['streetSearch','address']]){const el=document.getElementById(id);if(el)el.value=checkout[key]||''}if(checkout.destinationConfirmed&&Number.isFinite(checkout.lat)&&Number.isFinite(checkout.lng))await computeClientRoute();renderLiveTicket()}};
+// A configured service price of zero means no maneuver/travel charge, in both client and server.
+const paidTripCost=getTripCost;getTripCost=function(km){const result=paidTripCost(km);if(serviceAmount()===0)return {...result,total:0};return result};
+const zeroPricesBusiness=renderBusinessAdmin;renderBusinessAdmin=function(c){zeroPricesBusiness(c);const fixed=document.getElementById('fixedServicePrice');if(fixed)fixed.closest('.field').insertAdjacentHTML('beforeend','<small class="muted">Con 0, maniobra y traslado son gratuitos. Productos e impresión conservan sus precios.</small>')};
+setPaymentDecision=async function(orderId,status,reason=''){const {error}=await supabaseClient.rpc('maniobras_decide_payment',{p_id:orderId,p_status:status,p_reason:reason});if(error)throw error};
+const paymentOrdersAdmin=renderOrdersAdmin;renderOrdersAdmin=async function(c,...args){await paymentOrdersAdmin(c,...args);c.querySelectorAll('[data-order-status]').forEach(select=>{select.disabled=!canModule('review');select.title=select.disabled?'Requiere permiso de Revisión de pagos':'Decisión manual de pago';const delivered=select.value==='entregado';const option=select.querySelector('option[value=entregado]');if(option)option.disabled=true;if(delivered){select.disabled=true;select.title='Entrega cerrada desde Entregas y seguimiento'}select.onchange=async()=>{select.disabled=true;try{await setPaymentDecision(select.dataset.orderStatus,select.value==='pagado'?'APPROVED':'PENDING_REVIEW');toast('Pago actualizado.','ok');await renderOrdersAdmin(c,true)}catch(e){toast(e.message,'error');await renderOrdersAdmin(c,true)}}})};
 </script>
 </body>
 </html>
