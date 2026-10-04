@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>Conexiones de correo</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src https://esm.sh 'sha256-vQStjOIZhNjK2JU7KWULWmX9Nq/5z8WOYnwHdGOwlqs='; style-src 'unsafe-inline'; connect-src 'self' https://*.supabase.co; base-uri 'none'; form-action 'none'; img-src 'none'">
+<style>
+:root{color-scheme:dark;--bg:#0c1420;--panel:#162334;--line:#304256;--text:#f1f5f9;--muted:#afbfce;--accent:#39c5b1}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:24px 18px 60px}header{display:flex;align-items:center;justify-content:space-between;gap:16px}h1{font-size:clamp(24px,4vw,34px);line-height:1.2}h2{font-size:20px;margin:0}p{color:var(--muted)}a{color:var(--accent);text-underline-offset:4px}button,input,select{font:inherit;max-width:100%;min-height:46px;border:1px solid var(--line);border-radius:12px}button{padding:10px 16px;background:#233b50;color:var(--text);cursor:pointer;transition:transform .15s,background .2s,box-shadow .2s}button:hover{background:#31536b;box-shadow:0 6px 20px #0003}button:active{transform:scale(.97)}button:disabled{opacity:.5;cursor:wait}button.primary{background:var(--accent);color:#092723;font-weight:700}input,select{width:100%;background:var(--bg);color:var(--text);padding:10px 12px;min-width:0}label{display:grid;gap:6px;margin-top:14px;color:var(--muted)}#cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:24px}article{min-width:0;border:1px solid var(--line);border-radius:20px;padding:22px;background:var(--panel);animation:appear .35s ease both}.email{overflow-wrap:anywhere;color:var(--accent);min-height:24px}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.actions button{flex:1}.note{font-size:14px}.saved{font-size:14px;color:var(--muted);overflow-wrap:anywhere}.notice{border-left:4px solid var(--accent);padding:14px 18px;background:var(--panel);border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;margin:18px 0}.notice.error{border-color:#e47979}#login{padding:24px;border:1px solid var(--line);border-radius:18px}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:3px}[hidden]{display:none!important}@keyframes appear{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@media(max-width:850px){#cards{grid-template-columns:1fr}header{align-items:flex-start}article{padding:18px}}@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head><body><main>
+<header><h1>Conexiones de correo</h1><a href="./index.html">Volver al sitio</a></header>
+<p>Conecta el correo donde recibes avisos bancarios y asigna hasta tres bancos. Google te pedirá autorización para leer Gmail.</p>
+<div id="notice" class="notice" role="status" aria-live="polite">Cargando tu sesión…</div>
+<section id="login" hidden><h2>Inicia sesión para continuar</h2><p>Utiliza tu cuenta de Entrega de Maniobras. Después vuelve a esta página.</p><a href="./index.html?acceso=login">Iniciar sesión o crear cuenta</a></section>
+<div id="cards"></div>
+<p class="note">La prueba comprueba acceso a Gmail. La lectura de avisos bancarios y la confirmación de pagos se incorporarán en la siguiente etapa.</p>
+<p class="note">Desvincular elimina esta conexión y su número de cuenta del sitio. Puedes retirar también el permiso de la aplicación desde tu cuenta de Google.</p>
+</main>
+<script type="module" id="gmailScript">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.58.0';
+const notice=document.getElementById('notice'),cards=document.getElementById('cards'),login=document.getElementById('login');
+let client,session,busy=false,renderSerial=0;
+function message(text,error=false){notice.textContent=text;notice.classList.toggle('error',error)}
+async function api(action,extra={}){
+  const {data:s,error:se}=await client.auth.getSession();if(se || !s.session)throw new Error('Inicia sesión en el sitio para continuar.');
+  session=s.session;
+  const {data,error}=await client.functions.invoke('gmail-oauth',{body:{action,...extra},headers:{Authorization:'Bearer '+session.access_token}});
+  if(error){let detail;try{detail=await error.context?.json()}catch{}throw new Error(detail?.error||'No respondió gmail-oauth. Revisa el despliegue y Verify JWT.')}return data;
+}
+async function action(button,work){if(busy)return;busy=true;button.disabled=true;try{await work()}catch(e){message(e.message||'No se pudo completar la acción.',true)}finally{busy=false;button.disabled=false}}
+function button(text,parent,work,primary=false){const b=document.createElement('button');b.type='button';b.textContent=text;b.className=primary?'primary':'';b.addEventListener('click',()=>action(b,work));parent.append(b);return b}
+async function render(){
+  const seq=++renderSerial;const result=await api('list');if(seq!==renderSerial)return;cards.replaceChildren();
+  for(let slot=1;slot<=3;slot++){
+    const row=result.connections.find(x=>x.slot===slot),card=document.createElement('article');
+    const title=document.createElement('h2');title.textContent='Banco '+slot;card.append(title);
+    const email=document.createElement('p');email.className='email';email.textContent=row?.connected?row.email:'Correo pendiente de conectar';card.append(email);
+    const top=document.createElement('div');top.className='actions';card.append(top);
+    button(row?.connected?'Cambiar correo':'Conectar Gmail',top,async()=>{
+      const result=await api('begin',{slot});const url=new URL(result.url);
+      if(url.origin!=='https://accounts.google.com')throw new Error('Destino de autorización inválido.');location.assign(url.href);
+    },true);
+    if(row?.connected){
+      button('Probar conexión',top,async()=>{const r=await api('test',{slot});message(r.email+': '+r.message);await render()});
+      const form=document.createElement('form');card.append(form);
+      function field(text,element){const label=document.createElement('label');label.append(document.createTextNode(text),element);form.append(label);return element}
+      const bank=document.createElement('select');for(const name of result.banks){const option=document.createElement('option');option.value=name;option.textContent=name;bank.append(option)}bank.value=row.bank||result.banks[0];field('Banco',bank);
+      const type=document.createElement('select');for(const [value,text] of [['clabe','CLABE'],['account','Número de cuenta']]){const option=document.createElement('option');option.value=value;option.textContent=text;type.append(option)}type.value=row.account_type||'clabe';field('Identificador',type);
+      const account=document.createElement('input');account.type='text';account.inputMode='numeric';account.autocomplete='off';account.maxLength=24;account.placeholder=type.value==='clabe'?'18 dígitos':'Número de cuenta';field('Número asociado a este correo',account);
+      type.addEventListener('change',()=>{account.placeholder=type.value==='clabe'?'18 dígitos':'Número de cuenta'});
+      if(row.last4){const saved=document.createElement('p');saved.className='saved';saved.textContent='Guardado: '+row.bank+' · termina en '+row.last4+'. Para cambiarlo, escribe nuevamente el número.';form.append(saved)}
+      const controls=document.createElement('div');controls.className='actions';form.append(controls);
+      button('Guardar banco',controls,async()=>{await api('save_bank',{slot,bank:bank.value,account_type:type.value,account:account.value});account.value='';message('Banco guardado.');await render()});
+      form.addEventListener('submit',e=>e.preventDefault());
+      const bottom=document.createElement('div');bottom.className='actions';card.append(bottom);
+      button('Desvincular',bottom,async()=>{if(!confirm('¿Eliminar esta conexión de correo y banco del sitio?'))return;await api('disconnect',{slot});message('Conexión eliminada.');await render()});
+    }
+    cards.append(card);
+  }
+}
+try{
+  const response=await fetch('./index.html',{cache:'no-store'});if(!response.ok)throw new Error('Coloca gmail-conexion.html junto al index.html del sitio.');
+  const html=new DOMParser().parseFromString(await response.text(),'text/html');
+  const config=JSON.parse(html.getElementById('siteConnection')?.textContent||'{}');
+  const url=new URL(config.SUPABASE_URL);if(url.protocol!=='https:' || !url.hostname.endsWith('.supabase.co'))throw new Error('Revisa SUPABASE_URL en siteConnection del index.html.');
+  const publicKey=config.SUPABASE_ANON_KEY;if(typeof publicKey!=='string' || publicKey.includes('PEGA_AQUI') || publicKey.startsWith('sb_secret_'))throw new Error('Revisa la clave pública de Supabase en el index.html.');
+  if(publicKey.split('.').length===3){try{const payload=JSON.parse(atob(publicKey.split('.')[1].replaceAll('-','+').replaceAll('_','/')));if(payload.role==='service_role')throw new Error('La clave de servicio no debe estar en HTML. Retírala y rótala.')}catch(e){if(e.message.includes('servicio'))throw e}}
+  client=createClient(url.origin,publicKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
+  const {data,error}=await client.auth.getSession();if(error)throw error;session=data.session;
+  client.auth.onAuthStateChange((_event,next)=>{
+    if((next?.user?.id||null)===(session?.user?.id||null)){session=next;return}
+    session=next;renderSerial++;cards.replaceChildren();login.hidden=Boolean(next);
+    setTimeout(async()=>{try{if(next){await render();message('Tu sesión está activa. Configura tus bancos.')}else message('Inicia sesión en Entrega de Maniobras y regresa aquí.')}catch(e){message(e.message,true)}},0);
+  });
+  const params=new URL(location.href).searchParams;const status=params.get('gmail'),reason=params.get('motivo');
+  history.replaceState(null,'',location.pathname);
+  if(!session){login.hidden=false;message('Inicia sesión en Entrega de Maniobras y regresa aquí.');}
+  else {await render();message(status==='error'?(reason||'No se completó la autorización.'):status==='conectado'?'Gmail conectado. Selecciona el banco y realiza la prueba.':'Tu sesión está activa. Configura tus bancos.',status==='error')}
+}catch(e){message(e.message||'No se pudo abrir el panel.',true)}
+</script></body></html>
