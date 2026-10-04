@@ -10,7 +10,7 @@
 <div id="notice" class="notice" role="status" aria-live="polite">Cargando tu sesión…</div>
 <section id="login" hidden><h2>Inicia sesión para continuar</h2><p>Utiliza tu cuenta de Entrega de Maniobras. Después vuelve a esta página.</p><a href="./index.html?acceso=login">Iniciar sesión o crear cuenta</a></section>
 <div id="cards"></div>
-<p class="note">Probar conexión comprueba acceso a Gmail. Consultar movimientos lee hasta 20 avisos de Hey Banco de los últimos 7 días. Los movimientos detectados no aprueban pagos ni se asignan todavía a órdenes.</p>
+<p class="note">Probar conexión comprueba acceso a Gmail. Consultar movimientos lee hasta 20 avisos de Hey Banco de los últimos 7 días. La consulta valida pagos cuando coinciden referencia, importe, destinatario y firma bancaria. Si falta algún dato, requiere revisión manual.</p>
 <p class="note">Desvincular elimina esta conexión y su número de cuenta del sitio. Puedes retirar también el permiso de la aplicación desde tu cuenta de Google.</p>
 </main>
 <script type="module" id="gmailScript">
@@ -76,7 +76,7 @@ async function render(){
           drawMovements(result.movements);detail.open=true;
           message('Consulta terminada: '+result.checked+' correos revisados, '+result.recognized+' reconocidos y '+result.added+' movimientos nuevos. '+
             (result.ignored?result.ignored+' correos no coinciden con el formato. ':'')+
-            (nextPageToken?'Hay más avisos. Espera 30 segundos y pulsa Consultar siguientes. ':'')+'Todavía no se han confirmado pagos.');
+            (nextPageToken?'Hay más avisos. Espera 30 segundos y pulsa Consultar siguientes. ':'')+(result.message||'Consulta terminada.')+(result.approved?.length?' Órdenes pagadas: '+result.approved.map(o=>o.folio).join(', '):''));
         }
         button('Consultar movimientos',reader,()=>scanPage(null),true);
         const nextButton=button('Consultar siguientes',reader,()=>scanPage(nextPageToken));nextButton.hidden=true;
