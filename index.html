@@ -24,7 +24,7 @@
    de Telegram ni una clave service_role en este archivo.
 -->
 <head>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-bTie1JAXlnxtkH9sissalbfNMij5W8Ly4fMspw9vPLU=' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src https: wss: blob:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-TsJbD9+dSSYwT2u6bJvugD9HngF1zVSfcD2CnCoddLA=' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src https: wss: blob:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Entrega de Maniobras</title>
@@ -246,6 +246,8 @@ button:disabled{transform:none;box-shadow:none;cursor:not-allowed}
 @media(max-width:600px){.header{flex-wrap:nowrap;gap:6px}.header .brand{flex:1 1 0;min-width:0;gap:8px}.header .brand-copy{min-width:0}.header .brand-copy h1,.header .brand-copy p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.header>.icon-btn,.header>.account-entry{width:40px;min-width:40px;height:44px;flex:0 0 40px}.header .brand-logo{width:36px;height:36px;flex:0 0 36px}}
 
 .bank-choice{justify-content:flex-start;gap:10px;align-items:center}.bank-choice input{flex:0 0 auto}.bank-choice strong,.bank-choice span{min-width:0;overflow-wrap:anywhere}.order-payment-instructions .field{margin-top:12px}.order-payment-instructions .payment-data{white-space:pre-wrap;overflow-wrap:anywhere}.bank-publish-actions .btn{flex:1;min-width:170px;text-decoration:none}@media(max-width:480px){.bank-publish-actions .btn{width:100%;flex-basis:100%}}
+
+.unified-payment-stack{display:grid;gap:12px;margin:12px 0}.unified-payment-card{padding:16px;border:1px solid var(--line);border-radius:16px;min-width:0}.unified-payment-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.unified-payment-head>div:first-child{min-width:0}.unified-payment-head strong{overflow-wrap:anywhere}.unified-payment-head small{display:block;margin-top:5px}.unified-payment-actions{display:flex;gap:8px;flex-shrink:0}.unified-payment-card .field{margin:0}.unified-payment-card textarea{min-height:84px}.unified-payment-actions .icon-btn{width:42px;height:42px}.unified-payment-card input,.unified-payment-card textarea{max-width:100%;min-width:0}
 </style>
 </head>
 <body>
@@ -1562,26 +1564,49 @@ async function businessBankRequest(input){
 }
 let businessBanksSerial=0;
 const banksBusinessRender=renderBusinessAdmin;
+const PAYMENT_EYE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+const PAYMENT_HIDDEN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 3 18 18M10 5.2A12 12 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-4 4.5M6.1 6.1A20 20 0 0 0 2 12s3.5 7 10 7a12 12 0 0 0 5.8-1.4M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
 renderBusinessAdmin=function(c){
- banksBusinessRender(c);const section=c.querySelector('#paymentAdmin')?.closest('.section-card');if(!section)return;
- section.insertAdjacentHTML('beforeend',`<div id="linkedBusinessBanks" class="form-section"><h4>Bancas vinculadas</h4><p class="small muted">Elige hasta tres bancas para mostrarlas a los clientes. Solo se publican los datos para recibir el pago.</p><div id="linkedBankList" role="status">${staffAccess.owner?'Consultando bancas…':'El propietario administra las bancas vinculadas.'}</div></div>`);
- if(staffAccess.owner)loadBusinessBanks(c,++businessBanksSerial);
+ banksBusinessRender(c);if(!staffAccess.owner)return;
+ const section=c.querySelector('#paymentAdmin')?.closest('.section-card');if(!section)return;
+ section.innerHTML='<h3>Métodos de pago</h3><p class="small muted">Cuentas vinculadas y métodos manuales en una sola lista. El ojo controla qué ve el cliente. Eliminar una banca conserva su conexión Gmail y el historial de pedidos.</p><div id="unifiedPaymentList" role="status">Consultando bancas…</div>';
+ loadBusinessBanks(c,++businessBanksSerial);
 };
 async function loadBusinessBanks(c,serial){
- const host=c.querySelector('#linkedBankList');try{
- const result=await businessBankRequest({action:'business_banks'});if(serial!==businessBanksSerial||!host.isConnected||!adminAuthorized)return;
- host.innerHTML=(result.banks.length?result.banks.map(bank=>`<div class="payment-item"><label class="row bank-choice"><input type="checkbox" data-bank-slot="${Number(bank.slot)}" ${bank.published?'checked':''}><strong>${esc(bank.bank)} · ${esc(bank.last4)}</strong></label><label class="field"><span>Beneficiario (opcional)</span><input class="input" data-bank-beneficiary="${Number(bank.slot)}" maxlength="100" value="${esc(bank.beneficiary)}"></label></div>`).join(''):'<p>Primero guarda una banca desde la configuración de Gmail.</p>')+`<label class="row bank-choice"><input id="bankReferenceEnabled" type="checkbox" ${state.config.paymentReferenceEnabled!==false?'checked':''}><span>Generar referencia opcional por orden</span></label><div class="toolbar bank-publish-actions"><button id="publishBusinessBanks" class="btn">${UI.save}<span>Guardar bancas visibles</span></button><a class="btn secondary" href="gmail-conexion.html">${UI.link||UI.settings||UI.database}<span>Vincular / cambiar bancas</span></a></div><p class="small muted">Si cambias una cuenta vinculada, vuelve aquí para confirmar su publicación.</p>`;
- host.querySelector('#publishBusinessBanks').onclick=async function(){
- this.disabled=true;try{
- const banks=[...host.querySelectorAll('[data-bank-slot]:checked')].map(el=>({slot:Number(el.dataset.bankSlot),beneficiary:host.querySelector(`[data-bank-beneficiary="${el.dataset.bankSlot}"]`).value.trim()}));
- await businessBankRequest({action:'publish_banks',banks,reference_enabled:host.querySelector('#bankReferenceEnabled').checked});
+ const host=c.querySelector('#unifiedPaymentList');if(!host)return;
+ let banks=[],loadError='';try{banks=(await businessBankRequest({action:'business_banks'})).banks}catch(e){loadError=e.message}
+ if(serial!==businessBanksSerial||!host.isConnected||!adminAuthorized)return;
+ let manuals=deepClone(state.config.paymentAdminMethods||state.config.payments.filter(p=>!p.linked_bank));
+ banks=banks.map(b=>{const saved=state.config.paymentBankNames?.[b.slot];return {...b,beneficiary:b.beneficiary||(saved?.bank===b.bank&&saved?.last4===b.last4?saved.name:''),visible:!!b.published}});
+ let referenceEnabled=state.config.paymentReferenceEnabled!==false,busy=false;
+ function paint(){
+ host.innerHTML=(loadError?`<div class="notice">${esc(loadError)}</div>`:'')+`<div class="unified-payment-stack">${banks.map(b=>`<article class="unified-payment-card" data-bank-card="${b.slot}"><div class="unified-payment-head"><div><strong>${esc(b.bank)} · ${esc(b.last4)}</strong><small>Vinculada · ${b.visible?'Visible al cliente':'Oculta al cliente'}</small></div><div class="unified-payment-actions"><button class="icon-btn" data-bank-toggle="${b.slot}" title="${b.visible?'Ocultar':'Mostrar'} banca" aria-label="${b.visible?'Ocultar':'Mostrar'} ${esc(b.bank)}" aria-pressed="${b.visible}">${b.visible?PAYMENT_EYE:PAYMENT_HIDDEN}</button><button class="icon-btn" data-bank-remove="${b.slot}" title="Eliminar banca" aria-label="Eliminar ${esc(b.bank)}">${UI.trash}</button></div></div><label class="field"><span>Beneficiario</span><input class="input" data-unified-beneficiary="${b.slot}" maxlength="100" value="${esc(b.beneficiary)}" placeholder="Nombre de quien recibe"></label></article>`).join('')}${manuals.map((p,i)=>`<article class="unified-payment-card" data-manual-card="${i}"><div class="unified-payment-head"><strong>Método manual · ${p.visible===false?'Oculto':'Visible'}</strong><div class="unified-payment-actions"><button class="icon-btn" data-manual-toggle="${i}" title="${p.visible===false?'Mostrar':'Ocultar'} método" aria-label="${p.visible===false?'Mostrar':'Ocultar'} ${esc(p.title)}" aria-pressed="${p.visible!==false}">${p.visible===false?PAYMENT_HIDDEN:PAYMENT_EYE}</button><button class="icon-btn" data-manual-remove="${i}" title="Eliminar método" aria-label="Eliminar ${esc(p.title)}">${UI.trash}</button></div></div><div class="admin-grid two"><label class="field"><span>Nombre</span><input class="input" data-unified-title="${i}" maxlength="120" value="${esc(p.title)}"></label><label class="field"><span>Datos para copiar / beneficiario</span><textarea class="textarea" data-unified-data="${i}" maxlength="1000">${esc(p.data)}</textarea></label></div></article>`).join('')}</div><label class="row bank-choice"><input id="unifiedReference" type="checkbox" ${referenceEnabled?'checked':''}><span>Referencia opcional por orden</span></label><div class="toolbar bank-publish-actions"><button id="unifiedAdd" class="btn secondary">${UI.plus}<span>Agregar método manual</span></button><a class="btn secondary" href="gmail-conexion.html">${UI.database}<span>Añadir / cambiar banca</span></a><button id="unifiedSave" class="btn">${UI.save}<span>Guardar métodos de pago</span></button></div><p class="small muted" id="unifiedPaymentStatus" role="status">Los cambios de visibilidad y beneficiario se aplican al guardar.</p>`;
+ function read(){banks.forEach(b=>b.beneficiary=host.querySelector(`[data-unified-beneficiary="${b.slot}"]`).value.trim());manuals.forEach((p,i)=>{p.title=host.querySelector(`[data-unified-title="${i}"]`).value.trim();p.data=host.querySelector(`[data-unified-data="${i}"]`).value.trim()});referenceEnabled=host.querySelector('#unifiedReference').checked}
+ const toggle=(selector,list,key)=>host.querySelectorAll(selector).forEach(btn=>btn.onclick=()=>{if(busy)return;read();const value=Number(btn.dataset[key]);const item=key==='bankToggle'?list.find(b=>b.slot===value):list[value];item.visible=item.visible===false;paint()});
+ toggle('[data-bank-toggle]',banks,'bankToggle');toggle('[data-manual-toggle]',manuals,'manualToggle');
+ host.querySelectorAll('[data-manual-remove]').forEach(btn=>btn.onclick=()=>{if(busy)return;read();manuals.splice(Number(btn.dataset.manualRemove),1);paint()});
+ host.querySelectorAll('[data-bank-remove]').forEach(btn=>btn.onclick=async()=>{
+ if(busy)return;read();const slot=Number(btn.dataset.bankRemove),bank=banks.find(b=>b.slot===slot);
+ if(!window.confirm('¿Eliminar '+bank.bank+' de los métodos de pago? Se conservarán Gmail y el historial.'))return;
+ busy=true;host.querySelectorAll('button,input,textarea').forEach(el=>el.disabled=true);
+ try{await businessBankRequest({action:'delete_business_bank',slot});banks=banks.filter(b=>b.slot!==slot);state.config.payments=state.config.payments.filter(p=>p.id!=='linked-bank-'+slot);saveLocal();if(checkout.paymentId==='linked-bank-'+slot)checkout.paymentId='';toast('Banca eliminada; Gmail e historial conservados.','ok')}catch(e){toast(e.message,'error')}finally{busy=false;paint()}
+ });
+ host.querySelector('#unifiedAdd').onclick=()=>{if(busy)return;read();manuals.push({id:uid('pay'),title:'Nuevo método',data:'',visible:true});paint()};
+ host.querySelector('#unifiedSave').onclick=async()=>{
+ if(busy)return;read();if(loadError)return toast(loadError,'error');
+ try{for(const p of manuals){plainField(p.title,120);plainField(p.data,1000);if(!p.title)throw Error('Completa el nombre de cada método.')}for(const b of banks)plainField(b.beneficiary,100)}catch(e){return toast(e.message,'error')}
+ busy=true;host.querySelectorAll('button,input,textarea').forEach(el=>el.disabled=true);
+ let bankSaved=false;
+ try{
+ await businessBankRequest({action:'publish_banks',banks:banks.filter(b=>b.visible).map(b=>({slot:b.slot,beneficiary:b.beneficiary})),reference_enabled:referenceEnabled});bankSaved=true;
  const {data,error}=await supabaseClient.from('catalog_settings').select('data').eq('id',1).single();if(error)throw error;
- state.config.payments=data.data.payments||[];state.config.paymentReferenceEnabled=data.data.paymentReferenceEnabled!==false;saveLocal();
- if(!state.config.payments.some(p=>p.id===checkout.paymentId))checkout.paymentId='';
- toast('Bancas visibles actualizadas.','ok');renderBusinessAdmin(c);
- }catch(e){toast(e.message,'error');this.disabled=false}
+ const next={...data.data,paymentAdminMethods:manuals,paymentBankNames:Object.fromEntries(banks.map(b=>[b.slot,{bank:b.bank,last4:b.last4,name:b.beneficiary}])),paymentReferenceEnabled:referenceEnabled,payments:[...manuals.filter(p=>p.visible!==false),...(data.data.payments||[]).filter(p=>p.linked_bank)]};
+ const {error:writeError}=await supabaseClient.from('catalog_settings').upsert({id:1,data:next,updated_at:new Date().toISOString()});if(writeError)throw writeError;
+ state.config={...state.config,...next};saveLocal();if(!state.config.payments.some(p=>p.id===checkout.paymentId))checkout.paymentId='';toast('Métodos de pago actualizados.','ok');banks.forEach(b=>b.published=b.visible);
+ }catch(e){toast((bankSaved?'La visibilidad de bancas se guardó; faltan los métodos manuales. ':'')+e.message,'error')}finally{busy=false;paint()}
  };
- }catch(e){if(serial===businessBanksSerial&&host.isConnected)host.textContent=e.message}
+ }
+ paint();
 }
 const bankCloudOrder=cloudOrderToState;
 cloudOrderToState=function(o){return {...bankCloudOrder(o),paymentReference:o.payment_reference||'',paymentBankSnapshot:o.payment_bank_snapshot||null}};
