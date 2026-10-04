@@ -24,7 +24,7 @@
    de Telegram ni una clave service_role en este archivo.
 -->
 <head>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-rhtQvgahk+mkftRdobDMFkNr/ENm9+IiiM8wHD/qykg=' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src https: wss: blob:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-9D48lrKm/isgtYI2nHYgcmj5VRqY4TR04j/+IRH6wyM=' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src https: wss: blob:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Entrega de Maniobras</title>
@@ -248,6 +248,8 @@ button:disabled{transform:none;box-shadow:none;cursor:not-allowed}
 .bank-choice{justify-content:flex-start;gap:10px;align-items:center}.bank-choice input{flex:0 0 auto}.bank-choice strong,.bank-choice span{min-width:0;overflow-wrap:anywhere}.order-payment-instructions .field{margin-top:12px}.order-payment-instructions .payment-data{white-space:pre-wrap;overflow-wrap:anywhere}.bank-publish-actions .btn{flex:1;min-width:170px;text-decoration:none}@media(max-width:480px){.bank-publish-actions .btn{width:100%;flex-basis:100%}}
 
 .unified-payment-stack{display:grid;gap:12px;margin:12px 0}.unified-payment-card{padding:16px;border:1px solid var(--line);border-radius:16px;min-width:0}.unified-payment-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.unified-payment-head>div:first-child{min-width:0}.unified-payment-head strong{overflow-wrap:anywhere}.unified-payment-head small{display:block;margin-top:5px}.unified-payment-actions{display:flex;gap:8px;flex-shrink:0}.unified-payment-card .field{margin:0}.unified-payment-card textarea{min-height:84px}.unified-payment-actions .icon-btn{width:42px;height:42px}.unified-payment-card input,.unified-payment-card textarea{max-width:100%;min-width:0}
+
+.admin-modal{isolation:isolate}.admin-modal .modal-head{position:relative;z-index:2;background:var(--card)}.admin-modal .modal-body{position:relative;z-index:1;scroll-behavior:auto;overflow-anchor:none}.admin-modal .admin-content{overflow-anchor:none;scroll-behavior:auto}
 </style>
 </head>
 <body>
@@ -1630,6 +1632,20 @@ loadCustomerOrder=async function(token){
  const {data,error}=await supabaseClient.rpc('maniobras_order_payment_info',{p_token:token});if(error||!data||customerToken!==token)return;
  const host=document.getElementById('customerOrderStatus');host.querySelector('.order-payment-instructions')?.remove();host.insertAdjacentHTML('beforeend',orderPaymentCard(data));bindPaymentCopies(host);
 };
+
+/* Abrir módulos desde arriba y limitar el mapa de origen a su módulo. */
+function resetAdminScroll(){const modal=document.getElementById('adminModal');for(const el of [modal?.querySelector('.modal-body'),document.getElementById('adminContent'),document.getElementById('adminTabs')])if(el){el.scrollTop=0;el.scrollLeft=0}}
+const stableAdminOpenModal=openModal;
+openModal=function(id){if(id==='adminModal')resetAdminScroll();return stableAdminOpenModal(id)};
+const stableAdminPane=renderAdminPane;
+renderAdminPane=function(id){
+ if(!canModule(id))return stableAdminPane(id);
+ resetAdminScroll();
+ if(id!=='business'&&originMap){originMap.remove();originMap=null;originMarker=null}
+ const result=stableAdminPane(id);resetAdminScroll();return result;
+};
+const stableOriginMapInit=initOriginMap;
+initOriginMap=function(){if(activeAdmin!=='business'||!document.getElementById('adminModal')?.classList.contains('show'))return;return stableOriginMapInit()};
 
 </script>
 </body>
