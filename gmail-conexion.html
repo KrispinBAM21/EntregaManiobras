@@ -1,16 +1,16 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>Conexiones de correo</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src https://esm.sh 'sha256-vQStjOIZhNjK2JU7KWULWmX9Nq/5z8WOYnwHdGOwlqs='; style-src 'unsafe-inline'; connect-src 'self' https://*.supabase.co; base-uri 'none'; form-action 'none'; img-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src https://esm.sh 'sha256-uABeIa2clhqTtJ7WVREGOzvtrYyVJ2RBD5Iahi7mgvU='; style-src 'unsafe-inline'; connect-src 'self' https://*.supabase.co; base-uri 'none'; form-action 'none'; img-src 'none'">
 <style>
-:root{color-scheme:dark;--bg:#0c1420;--panel:#162334;--line:#304256;--text:#f1f5f9;--muted:#afbfce;--accent:#39c5b1}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:24px 18px 60px}header{display:flex;align-items:center;justify-content:space-between;gap:16px}h1{font-size:clamp(24px,4vw,34px);line-height:1.2}h2{font-size:20px;margin:0}p{color:var(--muted)}a{color:var(--accent);text-underline-offset:4px}button,input,select{font:inherit;max-width:100%;min-height:46px;border:1px solid var(--line);border-radius:12px}button{padding:10px 16px;background:#233b50;color:var(--text);cursor:pointer;transition:transform .15s,background .2s,box-shadow .2s}button:hover{background:#31536b;box-shadow:0 6px 20px #0003}button:active{transform:scale(.97)}button:disabled{opacity:.5;cursor:wait}button.primary{background:var(--accent);color:#092723;font-weight:700}input,select{width:100%;background:var(--bg);color:var(--text);padding:10px 12px;min-width:0}label{display:grid;gap:6px;margin-top:14px;color:var(--muted)}#cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:24px}article{min-width:0;border:1px solid var(--line);border-radius:20px;padding:22px;background:var(--panel);animation:appear .35s ease both}.email{overflow-wrap:anywhere;color:var(--accent);min-height:24px}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.actions button{flex:1}.note{font-size:14px}.saved{font-size:14px;color:var(--muted);overflow-wrap:anywhere}.notice{border-left:4px solid var(--accent);padding:14px 18px;background:var(--panel);border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;margin:18px 0}.notice.error{border-color:#e47979}#login{padding:24px;border:1px solid var(--line);border-radius:18px}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:3px}[hidden]{display:none!important}@keyframes appear{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@media(max-width:850px){#cards{grid-template-columns:1fr}header{align-items:flex-start}article{padding:18px}}@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+:root{color-scheme:dark;--bg:#0c1420;--panel:#162334;--line:#304256;--text:#f1f5f9;--muted:#afbfce;--accent:#39c5b1}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:24px 18px 60px}header{display:flex;align-items:center;justify-content:space-between;gap:16px}h1{font-size:clamp(24px,4vw,34px);line-height:1.2}h2{font-size:20px;margin:0}p{color:var(--muted)}a{color:var(--accent);text-underline-offset:4px}button,input,select{font:inherit;max-width:100%;min-height:46px;border:1px solid var(--line);border-radius:12px}button{padding:10px 16px;background:#233b50;color:var(--text);cursor:pointer;transition:transform .15s,background .2s,box-shadow .2s}button:hover{background:#31536b;box-shadow:0 6px 20px #0003}button:active{transform:scale(.97)}button:disabled{opacity:.5;cursor:wait}button.primary{background:var(--accent);color:#092723;font-weight:700}input,select{width:100%;background:var(--bg);color:var(--text);padding:10px 12px;min-width:0}label{display:grid;gap:6px;margin-top:14px;color:var(--muted)}#cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:24px}article{min-width:0;border:1px solid var(--line);border-radius:20px;padding:22px;background:var(--panel);animation:appear .35s ease both}.email{overflow-wrap:anywhere;color:var(--accent);min-height:24px}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.actions button{flex:1}.movement{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px;overflow-wrap:anywhere}.movement p{margin:6px 0;font-size:14px}.movement strong{font-size:20px}.movement-list{margin-top:18px}.movement-list summary{cursor:pointer;padding:8px 0;color:var(--accent)}.note{font-size:14px}.saved{font-size:14px;color:var(--muted);overflow-wrap:anywhere}.notice{border-left:4px solid var(--accent);padding:14px 18px;background:var(--panel);border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;margin:18px 0}.notice.error{border-color:#e47979}#login{padding:24px;border:1px solid var(--line);border-radius:18px}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:3px}[hidden]{display:none!important}@keyframes appear{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@media(max-width:850px){#cards{grid-template-columns:1fr}header{align-items:flex-start}article{padding:18px}}@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body><main>
 <header><h1>Conexiones de correo</h1><a href="./index.html">Volver al sitio</a></header>
 <p>Conecta el correo donde recibes avisos bancarios y asigna hasta tres bancos. Google te pedirá autorización para leer Gmail.</p>
 <div id="notice" class="notice" role="status" aria-live="polite">Cargando tu sesión…</div>
 <section id="login" hidden><h2>Inicia sesión para continuar</h2><p>Utiliza tu cuenta de Entrega de Maniobras. Después vuelve a esta página.</p><a href="./index.html?acceso=login">Iniciar sesión o crear cuenta</a></section>
 <div id="cards"></div>
-<p class="note">La prueba comprueba acceso a Gmail. La lectura de avisos bancarios y la confirmación de pagos se incorporarán en la siguiente etapa.</p>
+<p class="note">Probar conexión comprueba acceso a Gmail. Consultar movimientos lee hasta 20 avisos de Hey Banco de los últimos 7 días. Los movimientos detectados no aprueban pagos ni se asignan todavía a órdenes.</p>
 <p class="note">Desvincular elimina esta conexión y su número de cuenta del sitio. Puedes retirar también el permiso de la aplicación desde tu cuenta de Google.</p>
 </main>
 <script type="module" id="gmailScript">
@@ -49,6 +49,35 @@ async function render(){
       const controls=document.createElement('div');controls.className='actions';form.append(controls);
       button('Guardar banco',controls,async()=>{await api('save_bank',{slot,bank:bank.value,account_type:type.value,account:account.value});account.value='';message('Banco guardado.');await render()});
       form.addEventListener('submit',e=>e.preventDefault());
+      if(row.bank==='Hey Banco' && row.last4){
+        const reader=document.createElement('div');reader.className='actions';card.append(reader);
+        const detail=document.createElement('details');detail.className='movement-list';card.append(detail);
+        const summary=document.createElement('summary');summary.textContent='Movimientos detectados';detail.append(summary);
+        const output=document.createElement('div');detail.append(output);
+        function drawMovements(rows){
+          output.replaceChildren();summary.textContent='Movimientos detectados ('+rows.length+')';
+          if(!rows.length){output.textContent='Todavía no hay movimientos guardados. Pulsa Consultar movimientos.';return}
+          for(const movement of rows){
+            const item=document.createElement('section');item.className='movement';
+            const amount=document.createElement('strong');amount.textContent=new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(movement.amount_cents/100);item.append(amount);
+            for(const text of ['Detectado · pendiente de relacionar con una orden',
+              'Destino: termina en '+movement.destination_last4+(movement.account_match?' · coincide con la cuenta guardada':' · no coincide; revisa tarjeta o cuenta'),
+              'Fecha del banco: '+movement.application_date,'Referencia: '+(movement.reference||'Sin referencia'),
+              'Clave de rastreo: '+movement.tracking_key]){const line=document.createElement('p');line.textContent=text;item.append(line)}
+            output.append(item);
+          }
+        }
+        button('Consultar movimientos',reader,async()=>{
+          message('Consultando avisos de Hey Banco…');
+          const result=await api('scan',{slot});
+          if(seq!==renderSerial)return;
+          drawMovements(result.movements);detail.open=true;
+          message('Consulta terminada: '+result.checked+' correos revisados, '+result.recognized+' reconocidos y '+result.added+' movimientos nuevos. '+
+            (result.ignored?result.ignored+' correos no coinciden con el formato. ':'')+
+            (result.limited?'Hay más de 20 avisos; esta prueba solo consultó el primer lote. ':'')+'Todavía no se han confirmado pagos.');
+        },true);
+        button('Ver guardados',reader,async()=>{const result=await api('movements',{slot});if(seq!==renderSerial)return;drawMovements(result.movements);detail.open=true;message('Movimientos guardados. No se consultó Gmail.');});
+      }
       const bottom=document.createElement('div');bottom.className='actions';card.append(bottom);
       button('Desvincular',bottom,async()=>{if(!confirm('¿Eliminar esta conexión de correo y banco del sitio?'))return;await api('disconnect',{slot});message('Conexión eliminada.');await render()});
     }
