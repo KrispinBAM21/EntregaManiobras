@@ -24,7 +24,7 @@
    de Telegram ni una clave service_role en este archivo.
 -->
 <head>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-9RrPv08heIiFYSu1E8ubLZEgNMYCQ54+vypbZwQyVmQ=' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src https: wss: blob:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-jB2Xxi3muNgaj2eOOjYxDwPGHKCQvzHqstv/XBaitTY=' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src https: wss: blob:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Entrega de Maniobras</title>
@@ -1245,7 +1245,7 @@ async function ticketCanvas(o,t=ticketSettings()){
  x.fillStyle='#aacbdc';x.beginPath();x.moveTo(540,77);x.lineTo(910,77);x.lineTo(875,108);x.lineTo(578,108);x.closePath();x.fill();box(825,42,38,35,'#c5dce8',0);box(839,24,16,18,'#c5dce8',0);for(let i=0;i<5;i++){box(565+i*49,53,45,23,i%2?'#c5dce8':'#b5d1e1',0)}x.strokeStyle='#c2deea';for(let i=0;i<3;i++){x.beginPath();x.moveTo(0,113+i*5);x.lineTo(1000,113+i*5);x.stroke()}x.restore();y+=125;
  if(y>c.height)throw Error('El ticket excede el tamaño permitido');const out=document.createElement('canvas');out.width=1000;out.height=Math.ceil(y);out.getContext('2d').drawImage(c,0,0);c.width=c.height=1;return out;
 }
-buildPdf=async function(o,settings=ticketSettings()){const c=await ticketCanvas(o,settings);if(!window.jspdf)throw Error('No cargó la librería PDF');const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'}),sliceHeight=Math.floor(277*c.width/190);for(let top=0,page=0;top<c.height;top+=sliceHeight,page++){if(page)doc.addPage();const part=document.createElement('canvas');part.width=c.width;part.height=Math.min(sliceHeight,c.height-top);part.getContext('2d').drawImage(c,0,top,c.width,part.height,0,0,c.width,part.height);doc.addImage(part.toDataURL('image/jpeg',.94),'JPEG',10,10,190,part.height*190/c.width)}return doc.output('blob')};
+buildPdf=async function(o,settings=ticketSettings()){const c=await ticketCanvas(o,settings);if(!window.jspdf)throw Error('No cargó la librería PDF');const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'}),fitWidth=Math.min(190,277*c.width/c.height),pageWidth=fitWidth>=150?fitWidth:190,sliceHeight=Math.ceil(277*c.width/pageWidth);for(let top=0,page=0;top<c.height;top+=sliceHeight,page++){if(page)doc.addPage();const part=document.createElement('canvas');part.width=c.width;part.height=Math.min(sliceHeight,c.height-top);part.getContext('2d').drawImage(c,0,top,c.width,part.height,0,0,c.width,part.height);doc.addImage(part.toDataURL('image/jpeg',.94),'JPEG',(210-pageWidth)/2,10,pageWidth,Math.min(277,part.height*pageWidth/c.width))}return doc.output('blob')};
 function downloadTicketBlob(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 async function downloadJpeg(o){try{const c=await ticketCanvas(o);const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.94));if(!blob)throw Error('No se pudo crear el JPEG');downloadTicketBlob(blob,'ticket-'+o.folio+'.jpeg')}catch(e){toast(e.message,'error')}}
 const ticketPost=renderPostConfirm;renderPostConfirm=function(o){ticketPost(o);document.getElementById('downloadPdf').insertAdjacentHTML('afterend',`<button id="downloadJpeg" class="btn secondary full">${UI.download}<span>Descargar JPEG</span></button><div class="notice"><strong>Guarda tu ticket para aclaraciones.</strong><br>Identifica tu solicitud con el número de orden ${esc(o.folio)}.</div>`);document.getElementById('downloadJpeg').onclick=()=>downloadJpeg(o)};
@@ -1647,6 +1647,29 @@ renderAdminPane=function(id){
 const stableOriginMapInit=initOriginMap;
 initOriginMap=function(){if(activeAdmin!=='business'||!document.getElementById('adminModal')?.classList.contains('show'))return;return stableOriginMapInit()};
 
+
+// Confirm service prices in the database before reporting success.
+const confirmedPricesBusiness=renderBusinessAdmin;
+renderBusinessAdmin=function(c){
+ confirmedPricesBusiness(c);
+ const button=document.getElementById('saveServicePrices');if(!button)return;
+ button.onclick=async()=>{
+  const fields=['fixedServicePrice','perDocumentPrice','colorDocumentPrice'],ids=['servicio','documentos','documentos_color'];
+  const values=fields.map(id=>document.getElementById(id)?.value.trim());
+  const prices=values.map(Number);
+  if(values.some(v=>!v)||prices.some(v=>!Number.isFinite(v)||v<0))return toast('Captura precios válidos, incluido cero.','error');
+  button.disabled=true;
+  try{
+   if(!supabaseClient||!await verifyAdmin())throw Error('Inicia sesión como administrador para guardar precios.');
+   const rows=ids.map((id,i)=>{const index=state.products.findIndex(p=>p.id===id);if(index<0)throw Error('Falta el producto '+id);return {...productRow(state.products[index],index),price:prices[i]}});
+   const result=staffAccess.owner?await supabaseClient.from('products').upsert(rows,{onConflict:'id'}):await supabaseClient.rpc('maniobras_save_module',{p_module:'business',p_config:{},p_products:rows});
+   if(result.error)throw result.error;
+   ids.forEach((id,i)=>state.products.find(p=>p.id===id).price=prices[i]);saveLocal();renderLiveTicket();
+   toast('Precios guardados en Supabase. El traslado se configura en Viajes.','ok');
+  }catch(e){toast('No se guardaron los precios: '+explainSupabaseError(e),'error')}
+  finally{button.disabled=false}
+ };
+};
 </script>
 </body>
 </html>
