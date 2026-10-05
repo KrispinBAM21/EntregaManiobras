@@ -3,7 +3,7 @@ const url=Deno.env.get('SUPABASE_URL')!,service=Deno.env.get('SUPABASE_SERVICE_R
 const origins=(Deno.env.get('ALLOWED_ORIGINS')||'https://krispinbam21.github.io').split(',').map(s=>s.trim());
 const db=createClient(url,service,{auth:{persistSession:false}});
 const publicActions=new Set(['plans','public_site','order','order_status']);
-const userActions=new Set(['dashboard','create_site','invoice','prices','decision','site_config','product','site_orders','order_decision','site_access','order_payment_decision','subscribers','subscription_access','preview_site','site_context','map_defaults']);
+const userActions=new Set(['dashboard','create_site','invoice','prices','decision','site_config','product','site_orders','order_decision','site_access','order_payment_decision','subscribers','subscription_access','preview_site','site_context','map_defaults','site_report','site_staff','staff_save','staff_remove','customer_ban','customer_unban','settle','site_bot']);
 function plain(value:unknown,depth=0):void {
  if(depth>8)throw Error('Información demasiado extensa');
  if(typeof value==='string'&&(value.length>2000||/[<>\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value)))throw Error('Texto inválido');
@@ -69,7 +69,7 @@ Deno.serve(async req=>{
   }
   const payload=b.payload||{};
   if(b.action==='site_config'){const previous=await rpc('site_context',actor,admin,{site_id:payload.site_id});payload.config={...previous.config,...payload.config};}
-  if(b.action==='site_config')for(const bank of payload.config?.banks||[]){const snapshot=await rpc('bank_snapshot',actor,admin,{site_id:payload.site_id,slot:bank.bank_slot});if(!snapshot?.cipher)throw Error('Vincula primero esa banca en el módulo de correos');await checkAccount(snapshot.cipher,snapshot.owner,bank.bank_slot,bank.account)}
+  if(b.action==='site_config')for(const bank of (payload.config?.banks||[]).filter((x:{bank_slot?:number})=>x.bank_slot!=null)){const snapshot=await rpc('bank_snapshot',actor,admin,{site_id:payload.site_id,slot:bank.bank_slot});if(!snapshot?.cipher)throw Error('Vincula primero esa banca en el módulo de correos');await checkAccount(snapshot.cipher,snapshot.owner,bank.bank_slot,bank.account)}
   for(const field of ['logo','image']){const v=b.action==='site_config'?payload.config?.[field]:payload[field];if(v&&!/^https:\/\//.test(v))throw Error('Las imágenes deben usar URL HTTPS')}
   for(const x of payload.config?.social||[])if(!/^https:\/\//.test(x.url)||!['facebook','instagram','tiktok','x','website','whatsapp'].includes(x.type))throw Error('Red social inválida');
   const map=b.action==='map_defaults'?payload:payload.config;
