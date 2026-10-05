@@ -1,6 +1,6 @@
 (function(){
  const c=window.PLATFORM_CONFIG;
- window.Platform={tiles(config={},defaults={}){const m=config.mapMode==='own'||(!config.mapMode&&config.tiles)?config:defaults;let tiles=m.tiles||'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';return tiles.replaceAll('{apiKey}',encodeURIComponent(m.mapKey||''))},applyAppearance(config={},preferenceKey){
+ window.Platform={siteUrl(slug){return new URL(encodeURIComponent(slug)+'/',c.base).href},tiles(config={},defaults={}){const m=config.mapMode==='own'||(!config.mapMode&&config.tiles)?config:defaults;let tiles=m.tiles||'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';return tiles.replaceAll('{apiKey}',encodeURIComponent(m.mapKey||''))},applyAppearance(config={},preferenceKey){
  for(const [field,css] of [['primaryColor','--primary'],['accentColor','--accent']])if(/^#[0-9a-f]{6}$/i.test(config[field]||''))document.documentElement.style.setProperty(css,config[field]);
  let preference=null;try{if(preferenceKey)preference=localStorage.getItem(preferenceKey)}catch{}
  const dark=(preference==='light'||preference==='dark'?preference:config.theme)==='dark';document.documentElement.classList.toggle('dark',dark);document.body.classList.toggle('dark',dark);document.documentElement.style.colorScheme=dark?'dark':'light';
