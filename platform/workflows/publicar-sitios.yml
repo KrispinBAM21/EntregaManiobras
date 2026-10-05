@@ -1,0 +1,32 @@
+# Copiar a .github/workflows/publicar-sitios.yml del repositorio elegido.
+name: Publicar sitios por suscripcion
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+permissions:
+  contents: write
+concurrency:
+  group: sitios-saas
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir rutas activas
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PUBLIC_OUTPUT: .
+          PLATFORM_WEB: platform/web
+        run: python3 platform/scripts/publish.py
+      - name: Guardar rutas nuevas
+        run: |
+          git config user.name 'Sitios de negocio'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -- '*/.platform-site' '*/index.html' '*/store.js' '*/icons.js' '*/sdk.js' '*/config.js' '*/platform.css' '*/panel.html'
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publicar rutas de negocios suscritos'
+            git push
+          fi
