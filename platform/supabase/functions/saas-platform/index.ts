@@ -76,10 +76,12 @@ Deno.serve(async req=>{
   if(map?.tiles&&!/^https:\/\//.test(map.tiles))throw Error('Usa tiles HTTPS');
   if(map?.mapKey&&!/^[A-Za-z0-9._-]{1,300}$/.test(map.mapKey))throw Error('Clave de mapa inválida');
   if(b.action==='site_config'){
-   for(const field of ['headerImage'])if(payload.config[field]&&!/^https:\/\//.test(payload.config[field]))throw Error('Imagen inválida');
+   for(const field of ['headerImage','backgroundImage','backgroundImageDark','preMenuImage'])if(payload.config[field]&&!/^https:\/\//.test(payload.config[field]))throw Error('Imagen inválida');
    if(payload.config.ticketQr&&!/^https:\/\//.test(payload.config.ticketQr))throw Error('QR: utiliza un enlace HTTPS');
   }
   if(b.action==='order'||b.action==='order_status'){if(!/^[0-9a-f-]{36}$/i.test(payload.access_token||''))throw Error('Código de acceso inválido');payload.access_hash=await digest(payload.access_token);delete payload.access_token}
-  return reply({data:await rpc(b.action,actor,admin,payload)});
+  const result=await rpc(b.action,actor,admin,payload);
+  if(['public_site','preview_site'].includes(b.action)&&result?.config){delete result.config.promotionTemplates;const now=Date.now();result.config.promotions=(result.config.promotions||[]).filter((p:{active:boolean;endsAt:string})=>p.active===true&&Date.parse(p.endsAt)>now);result.server_time=new Date(now).toISOString();}
+  return reply({data:result});
  }catch(e){return reply({error:e instanceof Error?e.message:'Solicitud inválida'},400)}
 });
