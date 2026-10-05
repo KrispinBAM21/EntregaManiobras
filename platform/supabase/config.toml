@@ -1,0 +1,4 @@
+[functions.saas-platform]
+verify_jwt = false
+# saas-platform valida Auth para todas las acciones privadas.
+# Su worker requiere PLATFORM_WORKER_SECRET y las públicas están limitadas explícitamente.

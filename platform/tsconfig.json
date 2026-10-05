@@ -1,0 +1,1 @@
+{"compilerOptions":{"strict":true,"noEmit":true,"skipLibCheck":true,"target":"ES2022","module":"ESNext","moduleResolution":"Bundler","lib":["ES2022","DOM"],"baseUrl":".","paths":{"npm:@supabase/supabase-js@2.58.0":["node_modules/@supabase/supabase-js"]}},"files":["tests/deno.d.ts","supabase/functions/saas-platform/index.ts"]}

@@ -1,0 +1,72 @@
+const assert=require('node:assert/strict'),fs=require('node:fs');
+const {PGlite}=require('@electric-sql/pglite');
+(async()=>{
+const db=new PGlite();await db.exec(`
+create role anon;create role authenticated;create role service_role bypassrls;
+create schema auth;create schema maniobras_private;
+create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
+create table public.catalog_settings(id int,data jsonb);
+create table public.maniobras_gmail_connections(user_id uuid,slot int,email text,bank text,last4 text,tested_at timestamptz,account_cipher text);
+create table public.maniobras_gmail_movements(id uuid primary key,user_id uuid,email text,message_id text,tracking_key text,reference text,amount_cents int,received_at timestamptz);
+create table maniobras_private.business_banks(user_id uuid,slot int);
+create table maniobras_private.bot_subscriptions(user_id uuid primary key,expires_at timestamptz);
+create table maniobras_private.bot_invoices(id uuid primary key,user_id uuid,currency text,amount int,reference text,bank jsonb,status text,created_at timestamptz,paid_at timestamptz,movement_id uuid);
+create table maniobras_private.payment_matches(movement_id uuid);
+create table maniobras_private.bot_creator(id int,telegram_id bigint);
+create table maniobras_private.telegram_accounts(telegram_id bigint,user_id uuid);
+create table maniobras_private.bot_access_controls(user_id uuid,suspended bool);
+create sequence maniobras_private.payment_reference_seq start 1001000;
+create function maniobras_private.bot_is_creator(uuid) returns bool language sql as 'select false';
+create function maniobras_private.bot_has_access(uuid) returns bool language sql as 'select exists(select 1 from maniobras_private.bot_subscriptions where user_id=$1 and expires_at>now())';
+create function maniobras_private.bot_change_access(uuid,text,uuid,bigint) returns jsonb language sql as 'select ''{}''::jsonb';
+create function public.maniobras_verify_bank_payments(uuid,int,jsonb) returns jsonb language sql as 'select ''[]''::jsonb';
+grant usage on schema public,auth,maniobras_private to service_role;
+grant all on all tables in schema public,auth,maniobras_private to service_role;
+grant all on all sequences in schema maniobras_private to service_role;
+grant execute on all functions in schema public,maniobras_private to service_role;
+`);await db.exec(fs.readFileSync('platform/supabase/platform.sql','utf8'));
+const owner='070030a9-de6b-47cf-87f4-0b5e32ca7d4c',buyer='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
+await db.query(`insert into auth.users values($1,'owner@test.mx',now()),($2,'buyer@test.mx',now()),($3,'other@test.mx',now())`,[owner,buyer,other]);
+const bank={id:'bank',bank:'Hey Banco',linked_bank:true,bank_slot:1,last4:'1234',data:'CLABE: 012345678901231234'};
+await db.query('insert into public.catalog_settings values(1,$1)',[{payments:[bank]}]);
+await db.query('insert into public.maniobras_gmail_connections values($1,1,\'owner@gmail.com\',\'Hey Banco\',\'1234\',now(),null)',[owner]);
+await db.query('insert into public.maniobras_gmail_connections values($1,1,\'buyer@gmail.com\',\'Hey Banco\',\'9876\',now(),null)',[buyer]);
+await db.query('insert into maniobras_private.business_banks values($1,1)',[owner]);
+await db.exec('set role service_role');
+async function api(action,actor,admin,payload){return (await db.query('select public.saas_platform_api($1,$2,$3,$4) as result',[action,actor,admin,payload])).rows[0].result}
+async function denied(fn,pattern){await assert.rejects(fn,pattern)}
+const site=await api('create_site',buyer,false,{slug:'tacos-mzo',name:'Tacos Mzo'});
+await denied(()=>api('public_site',null,false,{slug:'tacos-mzo'}),/Sitio no disponible/);
+await denied(()=>api('site_config',other,false,{site_id:site.id,config:{}}),/No tienes acceso/);
+await denied(()=>api('prices',buyer,false,{bot_price:1,site_price:1}),/Solo el creador/);
+const inv=await api('invoice',buyer,false,{kind:'BOT',bank_id:'bank'});
+const same=await api('invoice',buyer,false,{kind:'BOT',bank_id:'bank'});assert.equal(inv.id,same.id);
+await denied(()=>api('decision',buyer,false,{id:inv.id,status:'confirmed',reason:'fake'}),/Solo el creador/);
+await api('decision',owner,true,{id:inv.id,status:'confirmed',reason:'Revisado en banco'});
+await denied(()=>api('decision',owner,true,{id:inv.id,status:'confirmed',reason:'Otro intento'}),/ya confirmado/);
+assert.equal((await api('dashboard',buyer,false,{})).bot_access,true);
+assert.equal((await api('dashboard',other,false,{})).invoices.length,0);
+const web=await api('invoice',buyer,false,{kind:'WEB',site_id:site.id,bank_id:'bank'});
+// Transferencia no autenticada o incorrecta jamás activa el sitio.
+const movement='33333333-3333-4333-8333-333333333333';await db.query('insert into public.maniobras_gmail_movements values($1,$2,\'owner@gmail.com\',\'aabb\',\'tracking-one\',$3,$4,now())',[movement,owner,web.reference,web.amount]);
+const proof={message_id:'aabb',tracking_key:'tracking-one',authenticated:false,recipient_last4:'1234'};
+async function verify(p){return db.query('select public.maniobras_verify_bank_payments($1,1,$2)',[owner,[p]])}
+await verify(proof);await denied(()=>api('public_site',null,false,{slug:'tacos-mzo'}),/Sitio no disponible/);
+await verify({...proof,authenticated:true,recipient_last4:'9999'});await denied(()=>api('public_site',null,false,{slug:'tacos-mzo'}),/Sitio no disponible/);
+await verify({...proof,authenticated:true});assert.ok((await api('public_site',null,false,{slug:'tacos-mzo'})).id);
+const after=(await api('dashboard',buyer,false,{})).sites[0].expires_at;await verify({...proof,authenticated:true});assert.equal((await api('dashboard',buyer,false,{})).sites[0].expires_at,after);
+const config={name:'Tacos',lat:19.1,lng:-104.3,deliveryBase:0,perKm:0,maxKm:15,banks:[{id:'b1',bank:'Hey Banco',bank_slot:1,last4:'9876',account:'012345678901239876',visible:true}]};await api('site_config',buyer,false,{site_id:site.id,config});
+await api('product',buyer,false,{site_id:site.id,name:'Taco',price:800,stock:10});const product=(await api('public_site',null,false,{slug:'tacos-mzo'})).products[0];
+const payload={slug:'tacos-mzo',access_hash:'safe-token',customer:{name:'Test buyer',phone:'3141234567'},delivery:{type:'delivery',address:'Calle 1, casa 3',lat:19.1001,lng:-104.3},items:[{id:product.id,qty:2}],bank_id:'b1',total:1};
+const order=await api('order',null,false,payload);assert.equal(order.shipping,0);assert.equal(order.total,1600);assert.equal(order.access_hash,undefined);assert.equal(order.items[0].price,800);
+const repeat=await api('order',null,false,payload);assert.equal(repeat.id,order.id);assert.equal((await api('public_site',null,false,{slug:'tacos-mzo'})).products[0].stock,8);
+await denied(()=>api('order_status',null,false,{id:order.id,access_hash:'wrong-token'}),/Pedido no disponible/);
+await denied(()=>api('site_orders',other,false,{site_id:site.id}),/No tienes acceso/);
+await denied(()=>api('order_decision',buyer,false,{site_id:site.id,id:order.id,status:'accepted'}),/Confirma el pago/);
+await api('order_payment_decision',buyer,false,{site_id:site.id,id:order.id,status:'confirmed',reason:'Banco revisado'});await api('order_decision',buyer,false,{site_id:site.id,id:order.id,status:'accepted'});
+await api('order_decision',buyer,false,{site_id:site.id,id:order.id,status:'delivered'});
+await db.exec('reset role;set role authenticated');await denied(()=>db.query('select public.saas_platform_api(\'dashboard\',$1,true,\'{}\')',[owner]),/permission denied/);
+await denied(()=>db.query('select * from saas_private.orders'),/permission denied/);await db.exec('reset role;set role anon');await denied(()=>db.query('select * from saas_private.sites'),/permission denied/);
+await db.exec('reset role;set role service_role');await api('site_access',owner,true,{site_id:site.id,enabled:false});await denied(()=>api('public_site',null,false,{slug:'tacos-mzo'}),/Sitio no disponible/);
+console.log('PASS: aislamiento, acceso por rol, referencias previas, pagos auténticos, renovación idempotente, carrito idempotente, precios en servidor, cero en entrega, estados y bloqueo.');await db.close();
+})().catch(e=>{console.error(e);process.exit(1)});
