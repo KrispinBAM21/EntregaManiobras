@@ -1,4 +1,3 @@
-import { Image } from 'npm:imagescript@1.3.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
 const url=Deno.env.get('SUPABASE_URL')!,service=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,anon=Deno.env.get('SUPABASE_ANON_KEY')!;
 const origins=(Deno.env.get('ALLOWED_ORIGINS')||'https://krispinbam21.github.io').split(',').map(s=>s.trim());
@@ -44,7 +43,7 @@ Deno.serve(async req=>{
    await rpc('rate',null,false,{key:await digest('upload:'+identity.data.user.id)});
    const rawImage=new Uint8Array(await file.arrayBuffer());
    if(!((rawImage[0]===137&&rawImage[1]===80&&rawImage[2]===78&&rawImage[3]===71)||(rawImage[0]===255&&rawImage[1]===216)))throw Error('Solo PNG y JPEG reales');
-   const [width,height]=imageSize(rawImage);if(!width||!height||width*height>16000000)throw Error('Reduce la imagen a menos de 16 megapíxeles');const decoded=await Image.decode(rawImage);if(decoded.width*decoded.height>16000000)throw Error('Reduce la imagen a menos de 16 megapíxeles');
+   const [width,height]=imageSize(rawImage);if(!width||!height||width*height>16000000)throw Error('Reduce la imagen a menos de 16 megapíxeles');const { Image } = await import('https://raw.githubusercontent.com/matmen/ImageScript/298ff72872fe09179f313a8e42357d6314db2ba6/mod.ts');const decoded=await Image.decode(rawImage);if(decoded.width*decoded.height>16000000)throw Error('Reduce la imagen a menos de 16 megapíxeles');
    const png=file.type==='image/png',clean=png?await decoded.encode():await decoded.encodeJPEG(85),mime=png?'image/png':'image/jpeg';
    if(clean.length>5*1024*1024)throw Error('Reduce el tamaño de la imagen');
    const reserve=await rpc('asset_reserve',identity.data.user.id,role.data===true,{site_id,bytes:clean.length,mime});
