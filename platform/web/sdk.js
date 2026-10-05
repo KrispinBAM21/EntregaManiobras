@@ -4,7 +4,7 @@
  for(const [field,css] of [['primaryColor','--primary'],['accentColor','--accent']])if(/^#[0-9a-f]{6}$/i.test(config[field]||''))document.documentElement.style.setProperty(css,config[field]);
  let preference=null;try{if(preferenceKey)preference=localStorage.getItem(preferenceKey)}catch{}
  const dark=(preference==='light'||preference==='dark'?preference:config.theme)==='dark';document.documentElement.classList.toggle('dark',dark);document.body.classList.toggle('dark',dark);document.documentElement.style.colorScheme=dark?'dark':'light';
- const color=dark?config.backgroundDark:config.backgroundLight;document.documentElement.style.setProperty('--page-bg',/^#[0-9a-f]{6}$/i.test(color||'')?color:dark?'#0b1118':'#f7f7f9');
+ const color=dark?config.backgroundDark:config.backgroundLight;document.documentElement.style.setProperty('--page-bg',/^#[0-9a-f]{6}$/i.test(color||'')?color:dark?'#0d1015':'#f7f7f9');
  const url=dark?config.backgroundImageDark||config.backgroundImage:config.backgroundImage;
  const patterns={solid:'none',mesh:'radial-gradient(at 0% 0%,color-mix(in srgb,var(--primary) 18%,transparent),transparent 55%),radial-gradient(at 100% 30%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 60%)',stripes:'repeating-linear-gradient(135deg,transparent 0 24px,color-mix(in srgb,var(--text) 4%,transparent) 24px 25px)'};
  const photo=config.backgroundStyle==='image'&&/^https:\/\//.test(url||'');document.body.style.backgroundImage=photo?'linear-gradient(color-mix(in srgb,var(--page-bg) 82%,transparent),color-mix(in srgb,var(--page-bg) 82%,transparent)),url('+JSON.stringify(url)+')':patterns[config.backgroundStyle]||patterns.solid;
