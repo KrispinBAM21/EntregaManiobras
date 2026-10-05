@@ -27,6 +27,7 @@ grant execute on all functions in schema public,maniobras_private to service_rol
 `);await db.exec(fs.readFileSync('platform/supabase/platform.sql','utf8'));
 await db.exec('revoke usage on sequence maniobras_private.payment_reference_seq from service_role');await db.exec(fs.readFileSync('platform/supabase/panel-modules.sql','utf8'));
 await db.exec(fs.readFileSync('platform/supabase/business-admin-update.sql','utf8'));
+await db.exec(fs.readFileSync('platform/supabase/promotions-update.sql','utf8'));
 const owner='070030a9-de6b-47cf-87f4-0b5e32ca7d4c',buyer='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
 await db.query(`insert into auth.users values($1,'owner@test.mx',now()),($2,'buyer@test.mx',now()),($3,'other@test.mx',now())`,[owner,buyer,other]);
 const bank={id:'bank',bank:'Hey Banco',linked_bank:true,bank_slot:1,last4:'1234',data:'CLABE: 012345678901231234'};
@@ -98,6 +99,21 @@ await api('customer_ban',buyer,false,{site_id:site.id,phone:'3141234567',reason:
 await denied(()=>api('order',null,false,{...payload,access_hash:'blocked-order',bank_id:'manual'}),/bloqueado/);
 await api('customer_unban',buyer,false,{site_id:site.id,phone:'3141234567'});
 assert.ok((await api('site_report',buyer,false,{site_id:site.id})).audit.length>0);
-await db.exec('reset role');await db.exec(fs.readFileSync('platform/supabase/business-admin-update.sql','utf8'));
-console.log('PASS: equipo, suscripción, cuentas manuales, comisión y liquidación, auditoría; aislamiento, acceso por rol, referencias previas, pagos auténticos, renovación idempotente, carrito idempotente, precios en servidor, cero en entrega, estados y bloqueo.');await db.close();
+
+const promotion={id:'test-promo',title:'Tacos a precio especial',text:'Promoción de prueba',active:true,style:'banner',productId:product.id,price:500,startsAt:new Date(Date.now()-3600000).toISOString(),endsAt:new Date(Date.now()+3600000).toISOString()};
+await api('site_config',buyer,false,{site_id:site.id,config:{...manual,promotions:[promotion],promotionTemplates:[{...promotion,id:'template-one'}],backgroundStyle:'mesh',preMenuEnabled:true}});
+const discounted=await api('order',null,false,{...payload,access_hash:'promo-order',bank_id:'manual',items:[{id:product.id,qty:1,price:1}]});assert.equal(discounted.items[0].price,500);assert.equal(discounted.total,1500);
+await api('site_config',buyer,false,{site_id:site.id,config:{...manual,promotions:[{...promotion,startsAt:new Date(Date.now()-7200000).toISOString(),endsAt:new Date(Date.now()-3600000).toISOString()}]}});
+const expired=await api('order',null,false,{...payload,access_hash:'expired-promo',bank_id:'manual',items:[{id:product.id,qty:1,price:1}]});assert.equal(expired.items[0].price,800);
+assert.equal((await api('order_status',null,false,{id:discounted.id,access_hash:'promo-order'})).items[0].price,500);
+await api('site_config',buyer,false,{site_id:site.id,config:{...manual,promotions:[{...promotion,startsAt:new Date(Date.now()+3600000).toISOString(),endsAt:new Date(Date.now()+7200000).toISOString()}]}});
+const future=await api('order',null,false,{...payload,access_hash:'future-promo',bank_id:'manual',items:[{id:product.id,qty:1}]});assert.equal(future.items[0].price,800);
+
+await denied(()=>api('site_config',buyer,false,{site_id:site.id,config:{...manual,promotions:[{...promotion,endsAt:promotion.startsAt}]}}),/Fechas/);
+await denied(()=>api('site_config',buyer,false,{site_id:site.id,config:{...manual,promotions:[{...promotion,price:-1}]}}),/Precio/);
+await denied(()=>api('site_config',buyer,false,{site_id:site.id,config:{...manual,promotions:[{...promotion,productId:'99999999-9999-4999-8999-999999999999'}]}}),/producto/);
+await denied(()=>api('site_config',buyer,false,{site_id:site.id,config:{...manual,backgroundImage:'javascript:alert(1)'}}),/Imagen/);
+await api('staff_save',buyer,false,{site_id:site.id,email:'other@test.mx',permissions:['settings']});assert.equal((await api('site_orders',other,false,{site_id:site.id})).orders.length,0);assert.ok((await api('site_orders',other,false,{site_id:site.id})).products.length>0);
+await db.exec('reset role');await db.exec(fs.readFileSync('platform/supabase/business-admin-update.sql','utf8'));await db.exec(fs.readFileSync('platform/supabase/promotions-update.sql','utf8'));
+console.log('PASS: promociones vigentes/vencidas, precios en servidor, validación de fondos, equipo, suscripción, cuentas manuales, comisión y liquidación, auditoría; aislamiento, acceso por rol, referencias previas, pagos auténticos, renovación idempotente, carrito idempotente, precios en servidor, cero en entrega, estados y bloqueo.');await db.close();
 })().catch(e=>{console.error(e);process.exit(1)});
