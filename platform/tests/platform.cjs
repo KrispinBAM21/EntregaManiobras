@@ -110,7 +110,7 @@ await api('site_config',buyer,false,{site_id:site.id,config:{...manual,promotion
 const future=await api('order',null,false,{...payload,access_hash:'future-promo',bank_id:'manual',items:[{id:product.id,qty:1}]});assert.equal(future.items[0].price,800);
 
 await denied(()=>api('site_config',buyer,false,{site_id:site.id,config:{...manual,promotions:[{...promotion,endsAt:promotion.startsAt}]}}),/Fechas/);
-await denied(()=>api('site_config',buyer,false,{site_id:site.id,config:{...manual,promotions:[{...promotion,price:-1}]}}),/Precio/);
+await denied(()=>api('site_config',buyer,false,{site_id:site.id,config:{...manual,promotions:[{...promotion,price:-1}]}}),/Precio/);await denied(()=>api('site_config',buyer,false,{site_id:site.id,config:{...manual,promotions:[{...promotion,price:'500'}]}}),/Precio/);
 await denied(()=>api('site_config',buyer,false,{site_id:site.id,config:{...manual,promotions:[{...promotion,productId:'99999999-9999-4999-8999-999999999999'}]}}),/producto/);
 await denied(()=>api('site_config',buyer,false,{site_id:site.id,config:{...manual,backgroundImage:'javascript:alert(1)'}}),/Imagen/);
 await api('staff_save',buyer,false,{site_id:site.id,email:'other@test.mx',permissions:['settings']});assert.equal((await api('site_orders',other,false,{site_id:site.id})).orders.length,0);assert.ok((await api('site_orders',other,false,{site_id:site.id})).products.length>0);

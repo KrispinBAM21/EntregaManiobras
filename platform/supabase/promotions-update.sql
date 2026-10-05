@@ -11,7 +11,7 @@ begin
  for p in select value from jsonb_array_elements(coalesce(cfg->'promotions','[]')||coalesce(cfg->'promotionTemplates','[]')) loop
   if jsonb_typeof(p)<>'object' or coalesce(p->>'id','')!~'^[a-zA-Z0-9_-]{1,100}$' or length(coalesce(p->>'title','')) not between 1 and 100 or length(coalesce(p->>'text',''))>500 or coalesce(p->>'style','banner') not in ('banner','card','spotlight') or coalesce(p->>'image','')<>'' and p->>'image'!~'^https://' then raise exception 'Plantilla de promoción inválida';end if;
   if p->>'price' is not null then
-   if (p->>'price')!~'^[0-9]+$' or (p->>'price')::numeric>2147483647 then raise exception 'Precio especial inválido';end if;
+   if jsonb_typeof(p->'price')<>'number' or (p->>'price')!~'^[0-9]+$' or (p->>'price')::numeric>2147483647 then raise exception 'Precio especial inválido';end if;
    select price into product_price from saas_private.products where site_id=p_site and id=nullif(p->>'productId','')::uuid;
    if not found or (p->>'price')::int>=product_price then raise exception 'Selecciona un producto de este negocio con precio especial menor al habitual';end if;
   elsif coalesce(p->>'productId','')<>'' and not exists(select 1 from saas_private.products where site_id=p_site and id=(p->>'productId')::uuid) then raise exception 'Producto de otro negocio';end if;
