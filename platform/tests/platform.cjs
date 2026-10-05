@@ -3,7 +3,7 @@ const {PGlite}=require('@electric-sql/pglite');
 (async()=>{
 const db=new PGlite();await db.exec(`
 create role anon;create role authenticated;create role service_role bypassrls;
-create schema auth;create schema maniobras_private;
+create schema auth;create schema maniobras_private;create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
 create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
 create table public.catalog_settings(id int,data jsonb);
 create table public.maniobras_gmail_connections(user_id uuid,slot int,email text,bank text,last4 text,tested_at timestamptz,account_cipher text);
@@ -25,6 +25,7 @@ grant all on all tables in schema public,auth,maniobras_private to service_role;
 grant all on all sequences in schema maniobras_private to service_role;
 grant execute on all functions in schema public,maniobras_private to service_role;
 `);await db.exec(fs.readFileSync('platform/supabase/platform.sql','utf8'));
+await db.exec('revoke usage on sequence maniobras_private.payment_reference_seq from service_role');await db.exec(fs.readFileSync('platform/supabase/panel-modules.sql','utf8'));
 const owner='070030a9-de6b-47cf-87f4-0b5e32ca7d4c',buyer='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
 await db.query(`insert into auth.users values($1,'owner@test.mx',now()),($2,'buyer@test.mx',now()),($3,'other@test.mx',now())`,[owner,buyer,other]);
 const bank={id:'bank',bank:'Hey Banco',linked_bank:true,bank_slot:1,last4:'1234',data:'CLABE: 012345678901231234'};
@@ -68,5 +69,6 @@ await api('order_decision',buyer,false,{site_id:site.id,id:order.id,status:'deli
 await db.exec('reset role;set role authenticated');await denied(()=>db.query('select public.saas_platform_api(\'dashboard\',$1,true,\'{}\')',[owner]),/permission denied/);
 await denied(()=>db.query('select * from saas_private.orders'),/permission denied/);await db.exec('reset role;set role anon');await denied(()=>db.query('select * from saas_private.sites'),/permission denied/);
 await db.exec('reset role;set role service_role');await api('site_access',owner,true,{site_id:site.id,enabled:false});await denied(()=>api('public_site',null,false,{slug:'tacos-mzo'}),/Sitio no disponible/);
+await denied(()=>api('preview_site',other,false,{site_id:site.id}),/No tienes acceso/);await denied(()=>api('preview_site',buyer,false,{site_id:site.id}),/Renueva/);const pv=await api('preview_site',owner,true,{site_id:site.id});assert.equal(pv.preview,true);await api('site_access',owner,true,{site_id:site.id,enabled:true});await api('map_defaults',owner,true,{tiles:'https://example.com/{z}/{x}/{y}.png',mapKey:'public'});assert.equal((await api('preview_site',buyer,false,{site_id:site.id})).map_defaults.mapKey,'public');await denied(()=>api('map_defaults',buyer,false,{}),/Solo el creador/);const asset=await api('asset_reserve',buyer,false,{site_id:site.id,bytes:100,mime:'image/png'});assert.ok(asset.path.startsWith(buyer+'/'+site.id+'/'));await denied(()=>api('asset_reserve',other,false,{site_id:site.id,bytes:100,mime:'image/png'}),/No tienes acceso/);await denied(()=>api('site_config',buyer,false,{site_id:site.id,config:{theme:'bad'}}),/Tema inválido/);await api('asset_remove',buyer,false,{site_id:site.id,path:asset.path});await db.exec('reset role');assert.equal((await db.query('select count(*) as n from saas_private.assets')).rows[0].n,0);
 console.log('PASS: aislamiento, acceso por rol, referencias previas, pagos auténticos, renovación idempotente, carrito idempotente, precios en servidor, cero en entrega, estados y bloqueo.');await db.close();
 })().catch(e=>{console.error(e);process.exit(1)});
