@@ -1,0 +1,7 @@
+'use strict';
+window.SiteShell=(()=>{
+ function brand(config={}){const fallback=document.getElementById('brandFallback'),caption=document.getElementById('brandTagline');if(fallback){fallback.innerHTML=FoodIcons.plate;fallback.hidden=/^https:\/\//.test(config.logo||'')}if(caption)caption.textContent=config.tagline||'Comida, bebidas y productos';const theme=document.getElementById('theme');if(theme){theme.classList.add('theme-control');theme.innerHTML=Icon('sun')+'<span>'+(document.body.classList.contains('dark')?'Oscuro':'Predeterminado')+'</span>';theme.title=document.body.classList.contains('dark')?'Cambiar a modo predeterminado':'Cambiar a modo oscuro'} }
+ function count(){const el=document.getElementById('cartCount');if(el&&typeof draft!=='undefined'){const total=Object.values(draft.cart||{}).reduce((n,v)=>n+Number(v||0),0);el.textContent=total;el.hidden=total===0}}
+ document.addEventListener('click',e=>{const b=e.target.closest('button,.btn');if(!b||b.disabled||matchMedia('(prefers-reduced-motion:reduce)').matches)return;const rect=b.getBoundingClientRect(),wave=document.createElement('span');wave.className='interaction-wave';wave.setAttribute('aria-hidden','true');const size=Math.max(rect.width,rect.height)*2;wave.style.width=wave.style.height=size+'px';wave.style.left=(e.detail?e.clientX-rect.left:rect.width/2)-size/2+'px';wave.style.top=(e.detail?e.clientY-rect.top:rect.height/2)-size/2+'px';b.appendChild(wave);setTimeout(()=>wave.remove(),650)},true);
+ return {brand,count};
+})();
