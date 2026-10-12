@@ -24,7 +24,7 @@
    de Telegram ni una clave service_role en este archivo.
 -->
 <head>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-y3kTHth/VEYONnrHjNoFWdcymSsiXkiUMz0rdLAKFBM=' 'sha256-zdSVoAu/m5MzwW4+qWeOygcmS6byoMtXI5hfqNs5c/4=' 'sha256-5F6D+AQPFG21XDTwX9jUPtkAoIXnAyaN7tbXD3Emmdc=' 'sha256-h1eHlUhBmEfxmE7nsqmlWzWSAcwifD0ZRnAjkSFX7kY=' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src https: wss: blob:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-y3kTHth/VEYONnrHjNoFWdcymSsiXkiUMz0rdLAKFBM=' 'sha256-zdSVoAu/m5MzwW4+qWeOygcmS6byoMtXI5hfqNs5c/4=' 'sha256-5F6D+AQPFG21XDTwX9jUPtkAoIXnAyaN7tbXD3Emmdc=' 'sha256-kfGmlRmb+AT8w77s7tU7Vrdj9QVLEpi58FBBaXgRsS8=' 'sha256-nSRKqZETHLnz/jSncU/WB4n323eusJrk/PkbbTOV8Yg=' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src https: wss: blob:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Entrega de Maniobras</title>
@@ -274,6 +274,38 @@ body.account-address-flow .delivery-route>*,body.account-address-missing .delive
 </style>
 <style>
 #maniobrasBusinessProfile,#maniobrasCouponsPublic{margin:12px 8px 8px 0}.maniobras-image-previews{display:grid;grid-template-columns:2fr 1fr;gap:16px;align-items:center;margin:18px 0}.maniobras-image-previews img.cover{width:100%;max-height:180px;object-fit:cover;border-radius:12px}.maniobras-image-previews img.avatar{width:110px;height:110px;object-fit:cover;border-radius:50%}.maniobras-crop{width:100%;height:auto;border-radius:12px;background:#eee}.maniobras-cover{width:100%;max-height:230px;object-fit:cover}.maniobras-profile-main{padding:20px}.maniobras-avatar{width:90px;height:90px;border-radius:50%;object-fit:cover}.maniobras-profile-main>svg{width:64px;height:64px}.maniobras-social-nav{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}.maniobras-social-nav svg{width:24px;height:24px;fill:none;stroke:currentColor}.maniobras-hours-grid{display:grid;gap:10px;margin:18px 0}.maniobras-hour{display:grid;grid-template-columns:100px 1fr 1fr 100px;gap:10px;align-items:center}.maniobras-background-preview{max-height:180px;width:100%;object-fit:cover;border-radius:12px}.maniobras-coupon-entry{display:flex;gap:10px;flex-wrap:wrap}.maniobras-coupon-entry input{flex:1;min-width:120px}.maniobras-coupon-admin{padding:14px 0;border-bottom:1px solid var(--line)}#maniobrasCrop,#maniobrasPublicProfile,#maniobrasCouponList{width:min(760px,calc(100% - 24px));max-height:90dvh;overflow:hidden}#maniobrasCrop .modal-body,#maniobrasPublicProfile .modal-body,#maniobrasCouponList .modal-body{overflow:auto;min-height:0}#adminContent .btn{max-width:100%;white-space:normal}#adminContent .btn svg{flex-shrink:0}@media(max-width:600px){.maniobras-hour{grid-template-columns:1fr 1fr}.maniobras-hour>strong{grid-column:1/-1}.maniobras-image-previews{grid-template-columns:1fr}.maniobras-profile-main{padding:14px}}
+</style>
+<style>
+/* Una ventana compacta. En teléfonos alterna secciones dentro de la misma ventana. */
+#brandLogo[role=button]{cursor:pointer;transition:transform .18s ease,box-shadow .18s ease}
+#brandLogo[role=button]:hover{transform:scale(1.04)}#brandLogo[role=button]:focus-visible{outline:3px solid var(--primary);outline-offset:3px}
+#maniobrasPublicProfile{inset:50% auto auto 50%;transform:translate(-50%,-50%);width:min(900px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:hidden;display:flex;flex-direction:column}
+#maniobrasPublicProfile .modal-head{padding:12px 16px;flex:0 0 auto;gap:10px}#maniobrasPublicProfile .modal-head h2{font-size:clamp(16px,2vw,21px);line-height:1.2;margin:0}
+#maniobrasPublicProfile .modal-head .icon-btn{width:36px;height:36px;flex:0 0 36px}
+#maniobrasPublicProfile .modal-body{padding:0;overflow:hidden!important;min-height:0}
+.msb-dialog{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;max-height:calc(100dvh - 88px);overflow:hidden}
+.msb-hero{position:relative;overflow:hidden;background:linear-gradient(115deg,var(--primary),#172638);padding:18px 22px;min-height:128px;display:flex;align-items:center}
+.msb-cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.msb-hero::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#07101bd9,#07101b7a);pointer-events:none}
+.msb-identity{display:flex;gap:18px;align-items:center;position:relative;z-index:1;color:white;min-width:0;width:100%}.msb-avatar{width:82px;height:82px;object-fit:contain;border-radius:16px;background:#ffffff17;padding:4px;flex:0 0 auto}.msb-identity>svg{width:62px;height:62px;flex-shrink:0}
+.msb-name{min-width:0;flex:1}.msb-name h3{margin:0 0 5px;font-size:clamp(20px,3vw,29px);line-height:1.15;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.msb-name>p{margin:0 0 9px;font-size:14px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.msb-badges{display:flex;gap:8px}.msb-status{display:inline-flex;align-items:center;gap:6px;background:#101b2dbb;border-radius:20px;padding:5px 10px;font-size:12px}.msb-status.open{background:#126548d9}.msb-status svg{width:15px;height:15px;fill:none;stroke:currentColor}
+.msb-tabs{display:none}.msb-sections{display:grid;grid-template-columns:1.1fr 1fr;gap:12px;padding:14px;min-width:0;min-height:0}.msb-card{border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0;background:var(--card);overflow:hidden}.msb-card h4{margin:0 0 10px;font-size:18px;line-height:1.2}
+.msb-location{display:flex;align-items:flex-start;gap:8px;margin:0 0 10px;font-size:14px;line-height:1.4}.msb-location svg{width:18px;height:18px;flex:0 0 18px;fill:none;stroke:currentColor}.msb-location span{overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.msb-bio{margin:0 0 10px;font-size:13px;line-height:1.4;white-space:pre-line;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.msb-socials{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}.msb-socials .icon-btn{width:34px;height:34px;flex:0 0 34px;border:1px solid var(--line)}.msb-socials svg{width:18px;height:18px;fill:none;stroke:currentColor}
+.msb-actions{display:flex;gap:7px;flex-wrap:wrap}.msb-actions .btn{min-width:0;font-size:12px;padding:8px 10px;white-space:normal;gap:5px}.msb-actions .btn svg{width:16px;height:16px;flex:0 0 16px}
+.msb-hours dl{margin:0;display:grid;gap:0}.msb-hours dl>div{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding:7px 0;font-size:13px;line-height:1.3}.msb-hours dt{font-weight:700}.msb-hours dd{margin:0;text-align:right}.msb-hours dl>div.today{color:var(--primary)}.msb-hours dl>div:last-child{border:0}
+.msb-footer{display:flex;justify-content:flex-end;padding:0 14px 10px}.msb-footer .btn{padding:7px 10px;font-size:12px}
+@media(max-width:600px),(max-height:570px){
+ .msb-hero{min-height:90px;padding:12px 14px}.msb-avatar{width:58px;height:58px;border-radius:12px}.msb-identity{gap:12px}.msb-name h3{font-size:19px}.msb-name>p{font-size:12px;margin-bottom:6px}
+ .msb-tabs{display:flex;gap:7px;padding:10px 12px 0}.msb-tabs button{flex:1;border:1px solid var(--line);border-radius:9px;color:var(--text);background:var(--card);font:inherit;font-size:13px;font-weight:700;padding:8px}.msb-tabs button.active{color:var(--primary);background:var(--secondary)}
+ .msb-sections{display:block;padding:10px 12px}.msb-card{padding:12px}.msb-dialog[data-section=info] .msb-hours,.msb-dialog[data-section=hours] .msb-info{display:none}.msb-card h4{font-size:16px;margin-bottom:8px}.msb-hours dl>div{padding:6px 0}.msb-bio{-webkit-line-clamp:3;font-size:12px}.msb-location{font-size:13px}.msb-socials{margin-bottom:8px}.msb-footer{padding:0 12px 8px}
+}
+@media(max-height:440px){
+ .msb-hero{min-height:64px;padding:8px 12px}.msb-avatar{width:42px;height:42px}.msb-name h3{font-size:16px;-webkit-line-clamp:1}.msb-name>p{display:none}.msb-status{font-size:10px;padding:3px 7px}.msb-tabs{padding-top:6px}.msb-tabs button{padding:5px}.msb-sections{padding:6px 10px}.msb-card{padding:8px}.msb-card h4{font-size:14px;margin-bottom:5px}.msb-hours dl>div{padding:3px 0;font-size:11px}.msb-bio{-webkit-line-clamp:2;font-size:11px}.msb-location{font-size:11px;margin-bottom:5px}.msb-socials .icon-btn{width:28px;height:28px;flex-basis:28px}.msb-actions .btn{padding:5px 7px;font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){#brandLogo[role=button]{transition:none;transform:none}}
+
 </style>
 </head>
 <body>
@@ -2107,6 +2139,60 @@ const imapCloseModal=closeModal;closeModal=function(id){if(id==='imapConnection'
 
 </script>
 <script>
+/* Icono de pestaña propio de Maniobras: PNG pequeño obtenido del logo del administrador. */
+const ManiobrasBrowserBrand=(()=>{
+ let lastSource=null,sequence=0,installedIcon='',retryTimer=null;
+ function install(png){
+  // Reemplazar el nodo evita que el navegador conserve el favicon anterior.
+  document.querySelectorAll('link[rel~="icon"]').forEach(node=>node.remove());
+  for(const rel of ['icon','shortcut icon']){
+   const node=document.createElement('link');node.rel=rel;node.type='image/png';node.sizes='32x32';
+   node.dataset.maniobrasFavicon='1';node.href=png;document.head.append(node);
+  }
+  installedIcon=png;
+ }
+ function fallback(){
+  const canvas=document.createElement('canvas');canvas.width=canvas.height=32;
+  const ctx=canvas.getContext('2d');ctx.clearRect(0,0,32,32);ctx.fillStyle='#ffffff';ctx.fillRect(7,3,19,26);ctx.strokeStyle='#bd2226';ctx.lineWidth=2;
+  ctx.strokeRect(7,3,19,26);ctx.beginPath();for(const y of [11,16,21]){ctx.moveTo(11,y);ctx.lineTo(22,y);}ctx.stroke();return canvas.toDataURL('image/png');
+ }
+ function allowed(value){return /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value)&&value.length<6000000||/^https:\/\//.test(value);}
+ function load(source){return new Promise((resolve,reject)=>{
+  const image=new Image();let settled=false;const timer=setTimeout(()=>finish(Error('El logo tardó demasiado en cargar.')),10000);
+  function finish(error){if(settled)return;settled=true;clearTimeout(timer);image.onload=image.onerror=null;error?reject(error):resolve(image);}
+  if(source.startsWith('https:'))image.crossOrigin='anonymous';
+  image.onload=()=>image.naturalWidth&&image.naturalHeight?finish():finish(Error('El logo no tiene dimensiones válidas.'));
+  image.onerror=()=>finish(Error('No se pudo decodificar el logo.'));image.src=source;
+ });}
+ function png32(image){
+  const canvas=document.createElement('canvas');canvas.width=canvas.height=32;
+  const ctx=canvas.getContext('2d');ctx.clearRect(0,0,32,32);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+  const scale=Math.min(32/image.naturalWidth,32/image.naturalHeight),width=Math.max(1,image.naturalWidth*scale),height=Math.max(1,image.naturalHeight*scale);
+  ctx.drawImage(image,(32-width)/2,(32-height)/2,width,height);
+  return canvas.toDataURL('image/png');
+ }
+ async function sync(name,logo){
+  if(String(name||'').trim())document.title=String(name).trim();
+  const source=String(logo||'').trim();
+  if(source===lastSource){if(installedIcon&&!document.querySelector('link[data-maniobras-favicon]'))install(installedIcon);return;}
+  lastSource=source;const current=++sequence;clearTimeout(retryTimer);
+  if(!source||!allowed(source)){install(fallback());return;}
+  try{
+   const image=await load(source);const png=png32(image);
+   if(current===sequence)install(png);
+  }catch{
+   if(current!==sequence)return;
+   // No sustituye ni borra el logo del administrador si existe un problema de carga.
+   if(source.startsWith('https:')){install(source);return;}
+   if(!installedIcon)install(fallback());lastSource=null;
+   retryTimer=setTimeout(()=>sync(name,logo),3000);
+  }
+ }
+ return {sync};
+})();
+
+</script>
+<script>
 /* Funciones propias de Maniobras. Sin imports, rutas, APIs ni módulos del sitio de comida. */
 const ManiobrasSite=(()=>{
  const names={facebook:'Facebook',instagram:'Instagram',tiktok:'TikTok',x:'X',website:'Sitio web',whatsappChannel:'Canal de WhatsApp',telegram:'Telegram',youtube:'YouTube'};
@@ -2127,16 +2213,14 @@ const ManiobrasSite=(()=>{
  }
  function refresh(){
   const name=String(state.config.businessName||'').trim();if(name)document.title=name;
-  let favicon=document.querySelector('link[data-maniobras-favicon]');if(!favicon){document.querySelectorAll('link[rel~="icon"]').forEach(x=>x.remove());favicon=document.createElement('link');favicon.rel='icon';favicon.dataset.maniobrasFavicon='1';document.head.append(favicon);}
-  const logo=String(state.config.logo||'');
-  if(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(logo)||/^https:\/\//.test(logo)){favicon.href=logo;favicon.type=logo.startsWith('data:')?logo.slice(5,logo.indexOf(';')):'';}
-  else{favicon.type='image/svg+xml';favicon.href='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="14" y="8" width="36" height="48" rx="5" fill="#fff" stroke="#bd2226" stroke-width="5"/><path d="M23 24h18M23 34h18M23 44h12" stroke="#bd2226" stroke-width="4"/></svg>');}
+  ManiobrasBrowserBrand.sync(name,state.config.logo);
   const p=state.config.personalization||{};let css=document.getElementById('maniobrasPersonalCss');if(!css){css=document.createElement('style');css.id='maniobrasPersonalCss';document.head.append(css);}
   const radius=Math.max(8,Math.min(28,Number(p.radius)||16)),width=Math.max(960,Math.min(1600,Number(p.width)||1240)),bg=imageSrc(p.background);
   const fonts={system:'system-ui, sans-serif',inter:'Inter, sans-serif',arial:'Arial, sans-serif',georgia:'Georgia, serif'};
   css.textContent=`body{font-family:${fonts[p.font]||'Inter, sans-serif'}}.container{max-width:${width}px}.section-card,.modal,.product-card{border-radius:${radius}px}.btn{border-radius:${Math.max(6,radius-3)}px}${bg?`body::before{background-image:url(${JSON.stringify(bg)});background-size:cover;background-position:center}main>.container{background:var(--bg)}`:''}${p.effects===false?'.btn{transition:none!important;animation:none!important}':''}`;
   let trigger=document.getElementById('maniobrasBusinessProfile');if(!trigger){trigger=document.createElement('button');trigger.id='maniobrasBusinessProfile';trigger.className='btn secondary';trigger.innerHTML=icon.profile+'<span>Conoce el negocio</span>';trigger.onclick=openProfile;const anchor=document.getElementById('socialLinks');anchor?.insertAdjacentElement('beforebegin',trigger);}
   if(trigger)trigger.hidden=profile().show===false;
+  const brand=document.getElementById('brandLogo');if(brand){brand.setAttribute('role','button');brand.setAttribute('tabindex','0');brand.setAttribute('aria-label','Ver información del negocio');brand.title='Información del negocio';brand.onclick=openProfile;brand.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openProfile();}};}
  }
  async function imageFile(file,aspect,apply){
   if(!file||file.size>8*1024*1024)throw Error('Selecciona una imagen PNG, JPEG o WebP de hasta 8 MB.');
@@ -2151,10 +2235,27 @@ const ManiobrasSite=(()=>{
   modal.querySelector('.modal-head button')?.addEventListener('click',()=>bitmap.close(),{once:true});draw();openModal(modal.id);
  }
  function openProfile(){
-  const p=profile(),modal=dynamicModal('maniobrasPublicProfile',state.config.businessName||'Negocio'),body=modal.querySelector('.modal-body'),avatar=p.useLogo?state.config.logo:imageSrc(p.avatar);
-  body.innerHTML=`<section class="maniobras-public-profile">${imageSrc(p.cover)?`<img class="maniobras-cover" src="${esc(imageSrc(p.cover))}" alt="Portada">`:''}<div class="maniobras-profile-main">${avatar?`<img class="maniobras-avatar" src="${esc(avatar)}" alt="Perfil del negocio">`:icon.profile}<h3>${esc(state.config.businessName)}</h3><p>${esc(state.config.tagline)}</p><p style="white-space:pre-wrap">${esc(p.bio)}</p><p>${esc(p.location||state.config.origin.address)}</p><nav class="maniobras-social-nav" aria-label="Redes sociales">${Object.entries(state.config.socials||{}).filter(([k,v])=>names[k]&&/^https:\/\//.test(v)).map(([k,v])=>`<a class="icon-btn" href="${esc(v)}" target="_blank" rel="noopener noreferrer" title="${names[k]}" aria-label="${names[k]}">${SOCIAL_ICONS[k]||UI.link||UI.business}</a>`).join('')}</nav>${p.donation?`<a class="btn" href="${esc(p.donation)}" target="_blank" rel="noopener noreferrer">${UI.link||UI.business}<span>${esc(p.donationLabel)}</span></a>`:''}${state.config.origin.confirmed?btn('maniobrasDirections','Cómo llegar al negocio',UI.pin,'secondary'):''}<div id="maniobrasHours"></div></div></section>`;
+  const p=profile(),modal=dynamicModal('maniobrasPublicProfile','Información del negocio'),body=modal.querySelector('.modal-body');
+  modal.querySelector('h2').textContent='Información del negocio';modal.setAttribute('aria-label','Información de '+state.config.businessName);
+  const avatar=p.useLogo?state.config.logo:imageSrc(p.avatar),cover=imageSrc(p.cover),details=state.config.businessDetails||{},hours=details.hours||[];
+  const days=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+  const normalize=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const parts=new Intl.DateTimeFormat('es-MX',{timeZone:'America/Mexico_City',weekday:'long',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+  const weekday=parts.find(x=>x.type==='weekday').value,clock=parts.find(x=>x.type==='hour').value+':'+parts.find(x=>x.type==='minute').value;
+  const index=days.findIndex(d=>normalize(d)===normalize(weekday)),today=hours.find(h=>normalize(h.day)===normalize(weekday)),previous=hours.find(h=>normalize(h.day)===normalize(days[(index+6)%7]));
+  const overnight=previous&&!previous.closed&&previous.close<=previous.open&&clock<previous.close;
+  const open=overnight||today&&!today.closed&&today.open&&today.close&&(today.close>today.open?clock>=today.open&&clock<today.close:clock>=today.open);
+  const status=!hours.length||!overnight&&(!today||!today.closed&&(!today.open||!today.close))?'Horario por confirmar':open?'Abierto ahora':today?.closed?'Cerrado hoy':'Cerrado ahora';
+  const place=p.location||state.config.origin?.address||'Ubicación por confirmar';
+  const social=Object.entries(state.config.socials||{}).filter(([key,value])=>names[key]&&/^https:\/\//.test(value));
+  const phone=String(details.phone||'').replace(/\D/g,''),whatsapp=String(state.config.whatsapp||'').replace(/\D/g,'');
+  body.innerHTML=`<div class="msb-dialog" data-section="info"><header class="msb-hero">${cover?`<img class="msb-cover" src="${esc(cover)}" alt="Portada del negocio">`:''}<div class="msb-identity">${avatar?`<img class="msb-avatar" src="${esc(avatar)}" alt="Logo o perfil del negocio">`:icon.profile}<div class="msb-name"><h3>${esc(state.config.businessName)}</h3><p>${esc(state.config.tagline)}</p><div class="msb-badges"><span class="msb-status ${open?'open':''}">${UI.pin}<span>${esc(status)}</span></span></div></div></div></header><nav class="msb-tabs" aria-label="Información del negocio"><button type="button" id="msbInfoTab" class="active" aria-pressed="true">Información</button><button type="button" id="msbHoursTab" aria-pressed="false">Horarios</button></nav><div class="msb-sections"><section class="msb-card msb-info"><h4>Ubicación y redes</h4><p class="msb-location">${UI.pin}<span>${esc(place)}</span></p>${p.bio?`<p class="msb-bio" title="${esc(p.bio)}">${esc(p.bio)}</p>`:''}<nav class="msb-socials" aria-label="Redes sociales">${social.length?social.map(([key,value])=>`<a class="icon-btn" href="${esc(value)}" target="_blank" rel="noopener noreferrer" aria-label="${names[key]}" title="${names[key]}">${SOCIAL_ICONS[key]||UI.link||UI.business}</a>`).join(''):'<span class="small muted">Sin redes configuradas.</span>'}</nav><div class="msb-actions">${state.config.origin?.confirmed?btn('maniobrasDirections','Cómo llegar',UI.map,'secondary'):''}${phone?`<a class="btn ghost" href="tel:${esc(phone)}">${UI.phone||UI.user}<span>Llamar</span></a>`:''}${whatsapp?`<a class="btn secondary" href="https://wa.me/${esc(whatsapp)}" target="_blank" rel="noopener noreferrer">${UI.whatsapp}<span>WhatsApp</span></a>`:''}${p.donation?`<a class="btn ghost" href="${esc(p.donation)}" target="_blank" rel="noopener noreferrer">${UI.link||UI.business}<span>${esc(p.donationLabel||'Apoyar al negocio')}</span></a>`:''}</div></section><section class="msb-card msb-hours"><h4>Horarios</h4><dl>${days.map(day=>{const h=hours.find(h=>normalize(h.day)===normalize(day)),current=normalize(day)===normalize(weekday);return `<div ${current?'class="today"':''}><dt>${day}</dt><dd>${h?h.closed?'Cerrado':esc(h.open||'Por definir')+' a '+esc(h.close||'Por definir'):'Por definir'}</dd></div>`;}).join('')}</dl></section></div><footer class="msb-footer">${btn('msbBack','Volver al sitio',UI.close,'ghost')}</footer></div>`;
+  const dialog=body.querySelector('.msb-dialog');
+  const select=id=>{dialog.dataset.section=id;for(const [key,button]of [['info','msbInfoTab'],['hours','msbHoursTab']]){const el=document.getElementById(button);el.classList.toggle('active',key===id);el.setAttribute('aria-pressed',String(key===id));}};
+  document.getElementById('msbInfoTab').onclick=()=>select('info');document.getElementById('msbHoursTab').onclick=()=>select('hours');
   document.getElementById('maniobrasDirections')?.addEventListener('click',()=>window.open('https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(state.config.origin.lat+','+state.config.origin.lng),'_blank','noopener,noreferrer'));
-  const hours=state.config.businessDetails?.hours||[];document.getElementById('maniobrasHours').innerHTML=hours.length?'<h4>Horarios</h4>'+hours.map(h=>`<p>${esc(h.day)}: ${h.closed?'Cerrado':esc(h.open)+' a '+esc(h.close)}</p>`).join(''):'';openModal(modal.id);
+  document.getElementById('msbBack').onclick=()=>{closeModal(modal.id);document.getElementById('brandLogo')?.focus();};
+  openModal(modal.id);
  }
  function renderProfile(host){
   const p=profile();let cover={...p.cover},avatar={...p.avatar};
